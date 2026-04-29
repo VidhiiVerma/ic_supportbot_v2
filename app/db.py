@@ -1,25 +1,24 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
 import os
-from dotenv import load_dotenv
+from databricks import sql
 
-load_dotenv()
+def get_connection():
+    return sql.connect(
+        server_hostname=os.getenv("DATABRICKS_HOST"),
+        http_path=os.getenv("DATABRICKS_HTTP_PATH"),
+        access_token=os.getenv("DATABRICKS_TOKEN")
+    )
 
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-engine = create_engine(DATABASE_URL)
-
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
-
-Base = declarative_base()
-
-def get_db():
-    db = SessionLocal()
+def run_query(query: str):
+    conn = get_connection()
     try:
-        yield db
+        cursor = conn.cursor()
+        cursor.execute(query)
+
+        columns = [col[0] for col in cursor.description]
+        rows = cursor.fetchall()
+
+        return [dict(zip(columns, row)) for row in rows]
+
     finally:
-        db.close()
+        conn.close()  

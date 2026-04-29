@@ -1,39 +1,23 @@
-import os
-import certifi
-import httpx
 from openai import AzureOpenAI
+import os
 
-# secure HTTP client
-http_client = httpx.Client(verify=certifi.where())
+class LLM:
+    def __init__(self):
+        self.client = AzureOpenAI(
+            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+            api_version="2024-12-01-preview"
+        )
+        self.deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
 
-# Azure OpenAI client
-client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version = "2024-12-01-preview",
-    http_client=http_client
-)
-
-def generate_response(prompt: str):
-    try:
-        prompt_lower = prompt.lower().strip()
-
-        # ✅ handle only thank you
-        if "thank" in prompt_lower:
-            return "You're welcome! See you 😊"
-
-        response = client.chat.completions.create(
-            model="gpt-5-chat",  
+    def generate(self, prompt: str):
+        res = self.client.chat.completions.create(
+            model=self.deployment,
             messages=[
-                {"role": "system", "content": "You are an Incentive compensation assistant."},
+                {"role": "system", "content": "Be precise. No guessing."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.0,
-            max_tokens=300
+            temperature=0
         )
 
-        return response.choices[0].message.content.strip()
-
-    except Exception as e:
-        print(f"[LLM ERROR] {str(e)}")
-        return "LLM failed to generate response."
+        return res.choices[0].message.content.strip()

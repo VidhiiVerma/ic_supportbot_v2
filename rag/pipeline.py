@@ -1,108 +1,114 @@
 import os
-from openai import AzureOpenAI
+from pathlib import Path
 
-from .loader import load_directory
-from .chunker import chunk_documents
-from .embedder import embed_texts
-from .indexer import VectorStore
-from .retriever import Retriever
+from langchain_community.document_loaders import TextLoader
+from langchain_community.vectorstores import FAISS
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
-INDEX_DIR = os.path.join(DATA_DIR, "vector_store")
-
-client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version="2024-12-01-preview"
+from rag.config import (
+    DATA_DIR,
+    INDEX_DIR,
+    CHUNK_SIZE,
+    CHUNK_OVERLAP,
+    TOP_K,
+    AZURE_API_KEY,
+    AZURE_ENDPOINT,
+    AZURE_API_VERSION,
+    EMBEDDING_DEPLOYMENT,
+    LLM_DEPLOYMENT,
 )
 
 
 class RAGSystem:
-    def __init__(self, top_k=5, min_score=0.2):
-        self.top_k = top_k
-        self.min_score = min_score
-        self.store = None
-        self.retriever = None
+    def __init__(self):
+        self.vector_store = None
 
+        self.embeddings = AzureOpenAIEmbeddings(
+            api_key=AZURE_API_KEY,
+            azure_endpoint=AZURE_ENDPOINT,
+            api_version=AZURE_API_VERSION,
+            model=EMBEDDING_DEPLOYMENT,
+        )
+
+    # ---------------- LOAD FILES ----------------
+    def _load_documents(self):
+        docs = []
+
+        for file in Path(DATA_DIR).rglob("*.txt"):
+            loader = TextLoader(str(file), encoding="utf-8")
+            docs.extend(loader.load())
+
+        return docs
+
+    # ---------------- BUILD INDEX ----------------
     def build(self):
-        if not os.path.exists(DATA_DIR):
-            print(f"[RAG] Data folder missing: {DATA_DIR}")
+        index_file = os.path.join(INDEX_DIR, "index.faiss")
+
+        if os.path.exists(index_file):
+            print("[RAG] Loading existing index...")
+            self.vector_store = FAISS.load_local(
+                INDEX_DIR,
+                self.embeddings,
+                allow_dangerous_deserialization=True,
+            )
+            print(f"[RAG] Loaded {self.vector_store.index.ntotal} vectors")
             return
 
-        if VectorStore.exists(INDEX_DIR):
-            print("[RAG] Loading existing index...")
-            self.store = VectorStore.load(INDEX_DIR)
-        else:
-            print("[RAG] Building new index...")
+        print("[RAG] Building new index...")
 
-            docs = load_directory(DATA_DIR)
-            if not docs:
-                print("[RAG] No documents found")
-                return
+        docs = self._load_documents()
+        if not docs:
+            print("[RAG] No documents found")
+            return
 
-            chunks = chunk_documents(docs)
-            texts = [c["text"] for c in chunks]
-            embeddings = embed_texts(texts)
-
-            self.store = VectorStore(dimension=embeddings.shape[1])
-            self.store.add(embeddings, chunks)
-            self.store.save(INDEX_DIR)
-
-        self.retriever = Retriever(
-            self.store,
-            top_k=self.top_k,
-            min_score=self.min_score
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=CHUNK_OVERLAP,
         )
-        print(f"[RAG] Ready with {self.store.total} vectors")
 
-    def ask(self, query: str) -> dict:
-        if not self.retriever:
-            return {"answer": "System not initialized.", "context": None}
+        chunks = splitter.split_documents(docs)
 
-        results = self.retriever.retrieve(query)
+        self.vector_store = FAISS.from_documents(chunks, self.embeddings)
+        self.vector_store.save_local(INDEX_DIR)
 
-        if not results or not isinstance(results, list):
-            print("[RAG ERROR] Invalid results:", results)
-            return {"answer": "Not found in document.", "context": None}
+        print(f"[RAG] Built with {len(chunks)} chunks")
 
-        # Safely extract text whether results are dicts or plain strings
-        context_parts = []
-        for r in results:
-            if isinstance(r, dict):
-                context_parts.append(r.get("text", ""))
-            elif isinstance(r, str):
-                context_parts.append(r)
+    # ---------------- ASK ----------------
+    def ask(self, query: str):
+        if not self.vector_store:
+            return {"answer": "RAG not initialized"}
 
-        context = "\n\n".join(filter(None, context_parts))
+        # 1. Retrieve docs
+        docs = self.vector_store.similarity_search(query, k=TOP_K)
+        context = "\n\n".join([d.page_content for d in docs])
 
-        if not context.strip():
-            return {"answer": "Not found in document.", "context": None}
+        # 2. Call LLM
+        llm = AzureChatOpenAI(
+            api_key=AZURE_API_KEY,
+            azure_endpoint=AZURE_ENDPOINT,
+            api_version=AZURE_API_VERSION,
+            deployment_name=LLM_DEPLOYMENT,
+            temperature=0.0,
+        )
 
-        prompt = f"""
+        response = llm.invoke(f"""
 Answer ONLY from the context below.
-If the answer is not present, reply: Not found in document.
 
 Context:
 {context}
 
 Question:
 {query}
-"""
+""")
 
-        try:
-            response = client.chat.completions.create(
-                model="gpt-5-chat",
-                messages=[
-                    {"role": "system", "content": "Answer strictly from context."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.0,
-                max_tokens=400
-            )
-            answer = response.choices[0].message.content.strip()
-            return {"answer": answer, "context": context}  # ✅ always a dict
+        return {
+            "answer": response.content,
+            "context": context,
+        }
 
-        except Exception as e:
-            print("[RAG ERROR]", e)
-            return {"answer": "LLM failed.", "context": None}
+    @property
+    def total_vectors(self):
+        if self.vector_store:
+            return self.vector_store.index.ntotal
+        return 0
