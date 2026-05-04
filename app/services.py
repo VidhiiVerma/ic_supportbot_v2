@@ -1,189 +1,385 @@
-import re
-from .db import run_query
-from .formatter import format_currency
+from app.db import get_rep_data
+from app.formatter import format_value, format_calc_for_llm, format_number
+from app.prompts import POLICY_PROMPT, EXPLANATION_PROMPT, WHY_PROMPT
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-# ---------------- NORMALIZATION ---------------- #
 
-def normalize_keys(data: dict) -> dict:
-    return {
-        k.strip().lower().replace(" ", "_"): v
-        for k, v in data.items()
+# ---------------- INTENT DETECTION ---------------- #
+
+def detect_intents(q: str):
+    q_lower = q.lower().strip()
+
+    if q_lower in ("hi", "hello", "hey"):
+        return ["greeting"]
+    if "thank" in q_lower:
+        return ["thanks"]
+
+    intents = []
+
+    if any(t in q_lower for t in ("what is", "show", "give", "list", "who", "which", "how many", "count", "total")):
+        intents.append("direct_data")
+
+    if any(t in q_lower for t in ("explain", "how is", "breakdown", "calculate", "calculated", "calculation")):
+        intents.append("explanation")
+        
+    if any(t in q_lower for t in ("eligibility", "eligible", "new hire")):
+        intents.append("eligibility")
+
+    if "why" in q_lower:
+        intents.append("why")
+
+    if any(t in q_lower for t in ("hcp", "doctor", "physician")):
+        intents.append("sales_data")
+
+    return intents if intents else ["policy"]
+
+
+# ---------------- CREDIT CALCULATION ---------------- #
+
+def calculate_credit(row):
+    try:
+        trx = float(row.get("dermacline_trx", 0))
+        flag = float(row.get("final_ic_cm_flag", 0))
+        pct = float(row.get("assignment_pct", 0))
+        return trx * flag * pct
+    except:
+        return 0
+
+
+# ---------------- HCP COUNT (NPI BASED) ---------------- #
+
+def count_unique_hcps(rows):
+    return len({
+        str(r.get("npi")).strip()
+        for r in rows
+        if r.get("npi")
+    })
+
+
+# ---------------- MONTH FILTER (BASIC) ---------------- #
+
+def filter_by_month(rows, question):
+    q = question.lower()
+
+    # extend later if needed
+    if "jan 2026" in q:
+        return [
+            r for r in rows
+            if "jan 2026" in str(r.get("month", "")).lower()
+        ]
+
+    return rows
+
+
+# ---------------- CREDIT QUERY ---------------- #
+
+def handle_credit_query(rows, question):
+    rows = filter_by_month(rows, question)
+
+    # Calculate breakdown
+    hcp_totals = {}
+    for r in rows:
+        credit = calculate_credit(r)
+        if credit > 0:
+            name = str(r.get("hcp_name", "Unknown HCP")).strip()
+            hcp_totals[name] = hcp_totals.get(name, 0) + credit
+
+    if not hcp_totals:
+        return "No credits found for the specified criteria."
+
+    # Formula explanation
+    lines = [
+        "1. Credit Calculation:",
+        "For each record: credit = dermacline_trx * final_ic_cm_flag * assignment_pct",
+        "",
+        "HCP Credit Breakdown:"
+    ]
+
+    # HCP list
+    for name in sorted(hcp_totals.keys()):
+        lines.append(f"{name}: {format_number(hcp_totals[name])}")
+
+    lines.append("-" * 25)
+    total_credit = sum(hcp_totals.values())
+    lines.append(f"TOTAL CREDITS: {format_number(total_credit)}")
+
+    return "\n".join(lines)
+
+
+# ---------------- HCP QUERY ---------------- #
+
+def handle_hcp_query(rows, question):
+    q_lower = question.lower()
+
+    # COUNT QUERY
+    if any(t in q_lower for t in ("how many", "count", "total")):
+        return str(count_unique_hcps(rows))
+
+    # LIST QUERY
+    names = {
+        str(r.get("hcp_name")).strip()
+        for r in rows
+        if r.get("hcp_name")
     }
 
-
-def format_data_for_llm(data: dict) -> str:
-    return "\n".join(
-        f"{k.replace('_', ' ').title()}: {v}"
-        for k, v in data.items()
-    )
+    return ", ".join(sorted(names)) if names else "data not available"
 
 
-# ---------------- DATABASE ---------------- #
+# ---------------- HCP INCLUSION ---------------- #
 
-def get_payout_data(rep_id: str):
-    query = f"""
-    SELECT *
-    FROM ic_implementation.ic_intelligence.payout_summary
-    WHERE `Rep ID` = '{rep_id}'
-    LIMIT 1
-    """
-    result = run_query(query)
-    return normalize_keys(result[0]) if result else None
-
-
-def get_eligibility_data(rep_name: str):
-    query = f"""
-    SELECT *
-    FROM ic_implementation.ic_intelligence.eligibility_2
-    WHERE lower(rep_name) = lower('{rep_name}')
-    """
-    result = run_query(query)
-    return normalize_keys(result[0]) if result else None
-
-
-def get_combined_data(rep_id: str):
-    payout = get_payout_data(rep_id)
-    if not payout:
-        return None
-
-    eligibility = get_eligibility_data(payout.get("rep_name"))
-    if eligibility:
-        payout.update(eligibility)
-
-    return payout
-
-
-# ---------------- INTENT ---------------- #
-
-def detect_intent(question: str) -> str:
+def check_hcp_inclusion(rows, question):
     q = question.lower()
+    rows = filter_by_month(rows, question)
 
-    if any(word in q for word in ["hi", "hello", "hey"]):
-        return "greeting"
+    matched = []
 
-    if any(word in q for word in ["policy", "rule", "eligibility"]):
-        return "policy"
+    for r in rows:
+        hcp = str(r.get("hcp_name", "")).lower()
+        if hcp and hcp in q:
+            matched.append(r)
 
-    return "rep_data"
+    if not matched:
+        return "HCP not found"
+
+    # check ANY row eligible
+    included = any(float(r.get("final_ic_cm_flag", 0)) == 1 for r in matched)
+
+    if included:
+        total_credit = sum(calculate_credit(r) for r in matched)
+        return f"Yes, included. Total credit = {round(total_credit, 2)}"
+    else:
+        return "No, excluded because final_ic_cm_flag = 0"
 
 
-def is_explanation_query(question: str) -> bool:
-    q = question.lower()
-    return any(word in q for word in ["explain", "why", "how", "breakdown", "calculated"])
+# ---------------- DETERMINISTIC FIELD MAPPING ---------------- #
 
-
-# ---------------- FIELD DETECTION ---------------- #
-
-FIELD_MAP = {
-    "payout": "total_ic_payout",
-    "earnings": "total_ic_earnings",
+FIELD_SYNONYMS = {
+    "target pay": "target_pay",
+    "base pay": "target_pay",
+    "ic earnings rate": "ic_earnings_rate",
+    "ic earning rate": "ic_earnings_rate",
+    "ic rate": "ic_earnings_rate",
+    "goal achievement rate": "goal_achievement_rate",
+    "achievement rate": "goal_achievement_rate",
+    "gar": "goal_achievement_rate",
+    "ic earnings value": "ic_earnings_value",
+    "base ic": "ic_earnings_value",
+    "total projected incremental trx": "total_projected_incremental_trx",
+    "incremental trx": "total_projected_incremental_trx",
+    "incremental": "total_projected_incremental_trx",
+    "commission rate": "commission_rate",
+    "commission earnings value": "commission_earnings_value",
+    "commission earnings": "commission_earnings_value",
     "commission": "commission_earnings_value",
-    "trx": "qtd_trx",
+    "total ic earnings": "total_ic_earnings",
+    "total ic payout": "total_ic_payout",
+    "ic payout": "total_ic_payout",
+    "total payout": "total_ic_payout",
+    "total ic": "total_ic_payout",
+    "payout": "total_ic_payout",
+    "total trx goal": "total_trx_goal",
+    "qtd trx goal": "qtd_trx_goal",
+    "trx goal": "qtd_trx_goal",
     "goal": "qtd_trx_goal",
-    "name": "rep_name"
+    "qtd trx": "qtd_trx",
+    "trx": "qtd_trx",
+    "qtd ic earnings rate": "qtd_ic_earnings_rate",
+    "qtd earnings rate": "qtd_ic_earnings_rate",
+    "new hire eligibility": "new_hire_eligibility",
+    "ic eligibility": "ic_eligibility",
+    "total eligibility": "total_eligibility",
+    "new hire days": "new_hire_eligible_days",
+    "ic days": "ic_eligible_days",
+    "total days": "total_days_in_qtr",
+    "hire date": "hire_date",
 }
 
+def detect_field(q_lower: str):
+    matched_field = None
+    max_len = 0
+    for syn, field in FIELD_SYNONYMS.items():
+        if syn in q_lower:
+            if len(syn) > max_len:
+                max_len = len(syn)
+                matched_field = field
+    return matched_field
 
-def detect_field(question: str):
-    q = question.lower()
+def handle_direct_data(question, rep_data):
+    q_lower = question.lower()
+    field = detect_field(q_lower)
+    
+    logger.info(f"Direct data query: '{question}' -> Mapped field: '{field}'")
+    
+    if not field:
+        return None
 
-    for keyword, field in FIELD_MAP.items():
-        if keyword in q:
-            return field
+    payout = rep_data.get("payout", {})
+    eligibility = rep_data.get("eligibility", {})
 
+    val = payout.get(field) if field in payout else eligibility.get(field)
+    
+    logger.info(f"Fetched value for {field}: {val}")
+
+    if val is not None:
+        return format_value(field, val)
     return None
 
+# ---------------- EXISTING IC CALC ---------------- #
+def calculate_ic(rep_data):
+    if not rep_data or not rep_data.get("payout"):
+        return None
 
-# ---------------- MAIN SERVICE ---------------- #
+    payout = rep_data["payout"]
 
-def get_rep_explanation(rep_id: str, question: str, rag, llm) -> str:
-    rep_data = get_combined_data(rep_id)
+    try:
+        qtd_trx = float(payout.get("qtd_trx", 0))
+        goal = float(payout.get("qtd_trx_goal", 0))
+        target_pay = float(payout.get("target_pay", 0))
+        ic_rate = float(payout.get("ic_earning_rate", payout.get("ic_earnings_rate", 0)))
 
+        incremental = max(0.0, qtd_trx - goal)
+
+        if incremental <= 50:
+            rate = 10
+        elif incremental <= 100:
+            rate = 20
+        else:
+            rate = 30
+
+        commission = incremental * rate
+        ic_earnings = target_pay * ic_rate
+        total_ic = ic_earnings + commission
+
+        return {
+            "qtd_trx": qtd_trx,
+            "goal": goal,
+            "incremental": incremental,
+            "rate": rate,
+            "commission": commission,
+            "ic_earnings": ic_earnings,
+            "total_ic": total_ic,
+            "target_pay": target_pay,
+        }
+
+    except:
+        return None
+
+
+# ---------------- MAIN FUNCTION ---------------- #
+
+def get_rep_explanation(rep_id, question, rag, llm):
+
+    rep_data = get_rep_data(rep_id)
     if not rep_data:
-        return "No data found for the given representative."
+        return "No data found for this rep_id"
 
-    intent = detect_intent(question)
+    intents = detect_intents(question)
 
-    # ---------- GREETING ---------- #
-    if intent == "greeting":
-        name = rep_data.get("rep_name", "there")
-        return f"Hello {name}. How can I assist you today?"
+    if "greeting" in intents:
+        return "Hello. How can I assist?"
+    if "thanks" in intents:
+        return "You're welcome."
 
-    # ---------- POLICY ---------- #
-    if intent == "policy":
-        context = None
+    sales_all = rep_data.get("sales", [])
 
-        if rag:
-            try:
-                result = rag.ask(question)
-                if isinstance(result, dict):
-                    context = result.get("context")
-            except Exception:
-                context = None
+    # filter rep rows
+    rows = [
+        r for r in sales_all
+        if str(r.get("assignment_emp")) == str(rep_id)
+    ]
 
-        response = llm.generate(f"""
-You are an IC policy assistant.
+    q_lower = question.lower()
 
-Answer strictly using the policy provided below.
+    # ---------------- DIRECT DATA ---------------- #
+    # If it's an explanation request, skip direct data lookup to allow explanation logic to run
+    if "direct_data" in intents and "explanation" not in intents:
+        val = handle_direct_data(question, rep_data)
+        if val is not None:
+            return val
 
-Policy:
-{context or "No policy information available."}
+    # ---------------- CREDIT ---------------- #
+    if "credit" in q_lower or "trx" in q_lower:
+        return handle_credit_query(rows, question)
 
-Question:
-{question}
-""")
+    # ---------------- HCP INCLUSION ---------------- #
+    if "include" in q_lower:
+        return check_hcp_inclusion(rows, question)
 
-        return response or "Policy information is not available."
+    # ---------------- HCP ---------------- #
+    if "hcp" in q_lower or "doctor" in q_lower:
+        return handle_hcp_query(rows, question)
 
-    # ---------- DIRECT FIELD RESPONSE ---------- #
-    field = detect_field(question)
+    # ---------------- ELIGIBILITY ---------------- #
+    if "eligibility" in intents:
+        eligibility = rep_data.get("eligibility", {})
+        if eligibility:
+            if "explanation" in intents:
+                # Use RAG to get the policy definition and combine with personal data
+                context = rag.get_context(question) if rag else ""
+                prompt = WHY_PROMPT.format(
+                    formatted_data=str(eligibility),
+                    policy_context=context,
+                    question=question
+                )
+                return llm.generate(prompt)
+            
+            # Fallback to structured personal data if just asking for info
+            nh_days = eligibility.get("new_hire_eligible_days", 0)
+            nh_frac = float(eligibility.get("new_hire_eligibility", 0) or 0)
+            ic_days = eligibility.get("ic_eligible_days", 0)
+            tot_days = eligibility.get("total_days_in_qtr", 0)
+            ic_frac = float(eligibility.get("ic_eligibility", 0) or 0)
+            tot_frac = float(eligibility.get("total_eligibility", 0) or 0)
+            reason = eligibility.get("eligibility_reason", "")
+            
+            exp = f"Your total eligibility is {format_value('total_eligibility', tot_frac)}. This is based on {ic_days} IC eligible days ({format_value('ic_eligibility', ic_frac)})"
+            if nh_days and float(nh_days) > 0:
+                exp += f" and {nh_days} new hire eligible days ({format_value('new_hire_eligibility', nh_frac)})"
+            exp += f" out of {tot_days} total days in the quarter."
+            if reason and str(reason).lower() not in ("nan", "none", ""):
+                exp += f" Reason: {reason}."
+            return exp
 
-    if field and not is_explanation_query(question):
-        value = rep_data.get(field)
+    # ---------------- IC EXPLANATION ---------------- #
+    if "explanation" in intents:
+        if any(t in q_lower for t in ("total credit", "ic earning", "total ic", "calculate", "calculated", "calculation", "payout", "earnings")):
+            payout = rep_data.get("payout", {})
+            eligibility = rep_data.get("eligibility", {})
+            if payout:
+                ic_val = float(payout.get("ic_earnings_value", payout.get("ic_earnings", 0)) or 0)
+                comm_val = float(payout.get("commission_earnings_value", payout.get("commission", 0)) or 0)
+                tot_elig = float(eligibility.get("total_eligibility", payout.get("total_eligibility", 1.0)) or 1.0)
+                total_ic = float(payout.get("total_ic_earnings", payout.get("total_ic_payout", 0)) or 0)
+                
+                return (
+                    f"IC Payout Breakdown:\n"
+                    f"Base IC Earnings + Commission Earnings = Total (Prorated by Eligibility)\n"
+                    f"({format_value('ic_earnings_value', ic_val)} + {format_value('commission_earnings_value', comm_val)}) * {format_value('total_eligibility', tot_elig)}\n"
+                    f"Total Payout: {format_value('total_ic_payout', total_ic)}"
+                )
 
-        if value is None:
-            return "Requested data is not available."
+    calc = calculate_ic(rep_data)
 
-        if any(x in field for x in ["payout", "earnings", "commission"]):
-            return f"{field.replace('_', ' ').title()}: {format_currency(value)}"
+    if "explanation" in intents and calc:
+        prompt = EXPLANATION_PROMPT.format(
+            formatted_data=format_calc_for_llm(calc),
+            question=question
+        )
+        return llm.generate(prompt)
 
-        return f"{field.replace('_', ' ').title()}: {value}"
+    if "why" in intents and calc:
+        prompt = WHY_PROMPT.format(
+            formatted_data=format_calc_for_llm(calc),
+            policy_context=rag.get_context(question) if rag else "",
+            question=question,
+        )
+        return llm.generate(prompt)
 
-    # ---------- EXPLANATION (LLM CONTROLLED) ---------- #
-    formatted_data = format_data_for_llm(rep_data)
+    # ---------------- POLICY ---------------- #
+    context = rag.get_context(question) if rag else ""
+    prompt = POLICY_PROMPT.format(context=context, question=question)
 
-    prompt = f"""
-You are an Incentive Compensation assistant.
-
-Objective:
-Explain the answer clearly using ONLY the data provided.
-
-Constraints:
-- Do not modify any numbers
-- Do not infer missing values
-- Do not assume formulas unless explicitly stated
-- If required data is missing, state "data not available"
-
-Style:
-- Professional and clear
-- Concise (maximum 4 sentences)
-- Structured explanation
-
-Response Structure:
-1. Direct answer
-2. Supporting explanation using provided values
-
-Data:
-{formatted_data}
-
-Question:
-{question}
-"""
-
-    response = llm.generate(prompt)
-
-    if not response:
-        return "Unable to generate a response at the moment."
-
-    return response
+    return llm.generate(prompt)

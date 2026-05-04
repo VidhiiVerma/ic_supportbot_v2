@@ -1,68 +1,58 @@
-import os
 import pandas as pd
 from docx import Document
 
+
+# ─────────────────────────────────────────────
+# DOCX PARSER (policy documents)
+# ─────────────────────────────────────────────
 
 def parse_docx(file_path: str) -> str:
     doc = Document(file_path)
     parts = []
 
-    for element in doc.element.body:
-        tag = element.tag.split("}")[-1]
+    # Extract paragraphs
+    for para in doc.paragraphs:
+        text = para.text.strip()
+        if text:
+            parts.append(text)
 
-        if tag == "p":
-            text = element.text
-            if text and text.strip():
-                parts.append(text.strip())
+    # Extract tables cleanly
+    for table in doc.tables:
+        table_rows = []
 
-        elif tag == "tbl":
-            for table in doc.tables:
-                if table._element is element:
-                    header = [c.text.strip() for c in table.rows[0].cells]
-                    parts.append(" | ".join(header))
-                    parts.append("-" * 50)
-                    for row in table.rows[1:]:
-                        cells = [c.text.strip() for c in row.cells]
-                        if any(cells):
-                            parts.append(" | ".join(cells))
-                    parts.append("")
-                    break
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            if any(cells):
+                table_rows.append(" | ".join(cells))
 
-    return "\n".join(parts)
+        if table_rows:
+            parts.append("\n".join(table_rows))
 
+    # Final clean join
+    return "\n\n".join(parts).strip()
+
+
+# ─────────────────────────────────────────────
+# TXT PARSER
+# ─────────────────────────────────────────────
 
 def parse_txt(file_path: str) -> str:
     for encoding in ("utf-8", "utf-8-sig", "latin-1"):
         try:
             with open(file_path, "r", encoding=encoding) as f:
-                return f.read()
+                return f.read().strip()
         except UnicodeDecodeError:
             continue
+
     with open(file_path, "rb") as f:
-        return f.read().decode("utf-8", errors="replace")
+        return f.read().decode("utf-8", errors="replace").strip()
 
 
-def parse_xlsx(file_path: str) -> list[dict]:
-    sheets = pd.read_excel(file_path, sheet_name=None, engine="openpyxl")
-    results = []
+# ─────────────────────────────────────────────
+# XLSX (INTENTIONALLY DISABLED)
+# ─────────────────────────────────────────────
 
-    for sheet_name, df in sheets.items():
-        rows_text = []
-        columns = [str(c).strip() for c in df.columns]
-
-        for _, row in df.iterrows():
-            parts = []
-            for col in columns:
-                val = row[col]
-                if pd.notna(val):
-                    parts.append(f"{col} is {val}")
-            if parts:
-                rows_text.append(", ".join(parts) + ".")
-
-        if rows_text:
-            results.append({
-                "sheet_name": sheet_name,
-                "text": "\n".join(rows_text),
-            })
-
-    return results
+def parse_xlsx(file_path: str):
+    raise RuntimeError(
+        "parse_xlsx is disabled. Use pandas-based retrieval (db.py) instead."
+    )

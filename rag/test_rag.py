@@ -1,145 +1,117 @@
-
 import sys
 import logging
 from rag.pipeline import RAGSystem
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
 class RAGTestInterface:
-    """Professional RAG testing interface"""
-    
     def __init__(self):
         self.rag = None
         self.session_active = False
-    
+
     def initialize(self):
-        """Initialize RAG system"""
         print("\n" + "=" * 70)
-        print("RAG System Testing Interface")
+        print("RAG Retrieval Testing Interface")
         print("=" * 70)
-        
+
         try:
             logger.info("Initializing RAG system...")
             self.rag = RAGSystem()
-            
-            logger.info("Building vector store...")
-            self.rag.build()
-            
-            logger.info(
-                f"RAG system ready. Indexed vectors: {self.rag.total_vectors}"
-            )
-            
+
+            logger.info("Loading / building index...")
+            self.rag.load_or_build()
+
+            logger.info(f"RAG ready. Vectors: {self.rag.total_vectors}")
+
             self.session_active = True
             self._print_help()
-            
+
         except Exception as e:
-            logger.error(f"Failed to initialize RAG system: {e}")
+            logger.error(f"Initialization failed: {e}")
             sys.exit(1)
-    
+
     def _print_help(self):
-        """Display help information"""
         print("\nSystem Status: READY")
-        print(f"Total Indexed Documents: {self.rag.total_vectors}")
-        print("\nSupported Commands:")
-        print("  - Question format: [Your question]")
-        print("  - Retrieval format: retrieve [your query]")
-        print("  - Exit format: quit, exit, or q")
+        print(f"Total Vectors: {self.rag.total_vectors}")
+        print("\nCommands:")
+        print("  retrieve <query>  → show retrieved chunks")
+        print("  context <query>   → show combined context")
+        print("  rebuild           → rebuild index")
+        print("  exit              → quit")
         print("-" * 70)
-    
-    def _handle_retrieval(self, query):
-        """Handle raw document retrieval"""
-        logger.info(f"Processing retrieval query: {query}")
-        
-        hits = self.rag.retrieve(query, top_k=5)
-        
-        if not hits:
-            print("  No relevant documents found for the given query.\n")
+
+    def _handle_retrieval(self, query: str):
+        logger.info(f"Retrieving for: {query}")
+
+        chunks = self.rag.retrieve(query)
+
+        if not chunks:
+            print("No relevant chunks found.\n")
             return
-        
-        print(f"\n  Retrieved {len(hits)} document(s):")
+
+        print(f"\nRetrieved {len(chunks)} chunks:\n")
         print("-" * 70)
-        
-        for index, hit in enumerate(hits, 1):
-            source = hit.get("source") or "Unknown"
-            if hit.get("sheet_name"):
-                source = f"{source} [Sheet: {hit['sheet_name']}]"
-            
-            relevance_score = hit.get("score", 0.0)
-            text_preview = hit.get("text", "")[:120].replace("\n", " ")
-            
-            print(f"\n  [{index}]")
-            print(f"      Source: {source}")
-            print(f"      Relevance Score: {relevance_score:.3f}")
-            print(f"      Content Preview: {text_preview}...")
-        
-        print("\n" + "-" * 70 + "\n")
-    
-    def _handle_question(self, question):
-        """Handle QA request"""
-        logger.info(f"Processing question: {question}")
-        
-        result = self.rag.ask(question)
-        
-        print("\nResponse:")
+
+        for i, chunk in enumerate(chunks, 1):
+            preview = chunk[:150].replace("\n", " ")
+            print(f"[{i}] {preview}...\n")
+
         print("-" * 70)
-        print(result.get("answer", "No answer generated."))
+
+    def _handle_context(self, query: str):
+        logger.info(f"Building context for: {query}")
+
+        context = self.rag.get_context(query)
+
+        print("\nContext:\n")
         print("-" * 70)
-        
-        if result.get("sources"):
-            print("\nSource Documents:")
-            for source in result["sources"]:
-                print(f"  - {source}")
-        
-        print()
-    
+        print(context[:1500] + ("..." if len(context) > 1500 else ""))
+        print("-" * 70)
+
     def run(self):
-        """Main interactive loop"""
         self.initialize()
-        
+
         try:
             while self.session_active:
-                try:
-                    user_input = input("\nQuery: ").strip()
-                    
-                    if not user_input:
-                        continue
-                    
-                    # Exit commands
-                    if user_input.lower() in ("quit", "exit", "q"):
-                        print("\nSession terminated.")
-                        self.session_active = False
-                        break
-                    
-                    # Retrieval mode
-                    if user_input.lower().startswith("retrieve "):
-                        query = user_input[9:].strip()
-                        self._handle_retrieval(query)
-                    
-                    # QA mode
-                    else:
-                        self._handle_question(user_input)
-                
-                except KeyboardInterrupt:
-                    print("\n\nSession interrupted by user.")
-                    self.session_active = False
-                except Exception as e:
-                    logger.error(f"Error processing query: {e}")
-                    print(f"Error: {e}\n")
-        
+                user_input = input("\nQuery: ").strip()
+
+                if not user_input:
+                    continue
+
+                if user_input.lower() in ("exit", "quit", "q"):
+                    print("Session terminated.")
+                    break
+
+                if user_input.lower() == "rebuild":
+                    logger.info("Rebuilding index...")
+                    self.rag.rebuild()
+                    print(f"Rebuilt. Vectors: {self.rag.total_vectors}")
+                    continue
+
+                if user_input.startswith("retrieve "):
+                    self._handle_retrieval(user_input[9:].strip())
+                    continue
+
+                if user_input.startswith("context "):
+                    self._handle_context(user_input[8:].strip())
+                    continue
+
+                print("Unknown command. Use 'retrieve' or 'context'.")
+
+        except KeyboardInterrupt:
+            print("\nSession interrupted.")
+
         finally:
             logger.info("Session closed.")
 
 
 def main():
-    """Entry point"""
-    interface = RAGTestInterface()
-    interface.run()
+    RAGTestInterface().run()
 
 
 if __name__ == "__main__":
