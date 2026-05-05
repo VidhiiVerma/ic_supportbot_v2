@@ -1,9 +1,10 @@
 fastapi
 uvicorn
+gunicorn
+
 openai
 sqlalchemy
 psycopg2-binary
-faiss-cpu
 pandas
 requests
 python-dotenv
@@ -17,7 +18,10 @@ botbuilder-integration-aiohttp==4.15.0
 aiohttp
 msrest
 
-langchain==0.1.0
-langchain-community==0.0.1
-langchain-openai==0.1.0
+# LangChain (remove strict pinning)
+langchain
+langchain-community
+langchain-openai
 
+# FAISS (no version pin)
+faiss-cpu
