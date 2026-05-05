@@ -20,4 +20,4 @@ msrest
 langchain==0.1.0
 langchain-community==0.0.1
 langchain-openai==0.1.0
-faiss-cpu==1.7.4
+

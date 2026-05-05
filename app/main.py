@@ -41,7 +41,6 @@ app.add_middleware(
 
 llm = LLM()
 
-# FIX: Load RAG safely (don’t rebuild blindly)
 rag = None
 try:
     from rag.pipeline import RAGSystem
