@@ -25,3 +25,5 @@ langchain-openai
 
 # FAISS (no version pin)
 faiss-cpu
+
+databricks-sql-connector
