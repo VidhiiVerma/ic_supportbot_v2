@@ -45,7 +45,7 @@ rag = None
 try:
     from rag.pipeline import RAGSystem
     rag = RAGSystem()
-    rag.load_or_build()   # <-- YOU MUST IMPLEMENT THIS
+    rag.load_or_build()   
     logger.info("RAG ready: %s vectors", rag.total_vectors)
 except Exception as e:
     logger.warning("RAG disabled: %s", str(e))
