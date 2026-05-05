@@ -34,14 +34,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ================= ENV =================
-MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID")
-MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD")
+# ================= ENV 
+MICROSOFT_APP_ID        = os.getenv("MICROSOFT_APP_ID")
+MICROSOFT_APP_PASSWORD  = os.getenv("MICROSOFT_APP_PASSWORD")
 MICROSOFT_APP_TENANT_ID = os.getenv("MICROSOFT_APP_TENANT_ID")
+
+logger.info("BOT STARTUP — APP_ID: %s", MICROSOFT_APP_ID[:8] + "..." if MICROSOFT_APP_ID else "❌ MISSING")
+logger.info("BOT STARTUP — PASSWORD: %s", "✅ SET" if MICROSOFT_APP_PASSWORD else "❌ MISSING")
+logger.info("BOT STARTUP — TENANT_ID: %s", MICROSOFT_APP_TENANT_ID[:8] + "..." if MICROSOFT_APP_TENANT_ID else "❌ MISSING")
+
 
 # ================= 🔥 CRITICAL FIX =================
 # Force correct OAuth scope (matches your working curl test)
-MicrosoftAppCredentials.oauth_scope = "https://api.botframework.com/.default"
+MicrosoftAppCredentials.trust_service_url("https://smba.trafficmanager.net/teams/")
 
 # ================= LLM =================
 llm = LLM()
