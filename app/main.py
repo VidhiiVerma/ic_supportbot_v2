@@ -54,6 +54,7 @@ except Exception as e:
 adapter_settings = BotFrameworkAdapterSettings(
     app_id=os.getenv("MICROSOFT_APP_ID"),
     app_password=os.getenv("MICROSOFT_APP_PASSWORD"),
+    channel_auth_tenant=os.getenv("MICROSOFT_APP_TENANT_ID") 
 )
 adapter = BotFrameworkAdapter(adapter_settings)
 
