@@ -15,6 +15,7 @@ from botbuilder.core import (
     TurnContext,
 )
 from botbuilder.schema import Activity
+from botframework.connector.auth import MicrosoftAppCredentials
 
 from app.services import get_rep_explanation
 from app.llm import LLM
@@ -38,6 +39,10 @@ MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID")
 MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD")
 MICROSOFT_APP_TENANT_ID = os.getenv("MICROSOFT_APP_TENANT_ID")
 
+# ================= 🔥 CRITICAL FIX =================
+# Force correct OAuth scope (matches your working curl test)
+MicrosoftAppCredentials.oauth_scope = "https://api.botframework.com/.default"
+
 # ================= LLM =================
 llm = LLM()
 
@@ -56,12 +61,11 @@ adapter_settings = BotFrameworkAdapterSettings(
     app_id=MICROSOFT_APP_ID,
     app_password=MICROSOFT_APP_PASSWORD,
     channel_auth_tenant=MICROSOFT_APP_TENANT_ID,
-    oauth_scope="https://api.botframework.com/.default"   # 🔥 critical fix
 )
 
 adapter = BotFrameworkAdapter(adapter_settings)
 
-# ================= REQUEST MODELS =================
+# ================= MODELS =================
 class AskRequest(BaseModel):
     query: str
     rep_id: str
@@ -79,7 +83,7 @@ async def handle_teams_message(turn_context: TurnContext):
             await turn_context.send_activity("Please send a message.")
             return
 
-        # 🔥 FIXED: use Teams AAD ID (string, not int)
+        # 🔥 IMPORTANT: Teams user ID (string UUID)
         rep_id = turn_context.activity.from_property.aad_object_id
 
         if not rep_id:
