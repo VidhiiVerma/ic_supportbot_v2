@@ -32,6 +32,7 @@ MICROSOFT_APP_TENANT_ID = os.getenv("MICROSOFT_APP_TENANT_ID")
 
 logger.info(f"APP_ID: {MICROSOFT_APP_ID}")
 logger.info(f"TENANT: {MICROSOFT_APP_TENANT_ID}")
+logger.info(f"PASSWORD LENGTH: {len(MICROSOFT_APP_PASSWORD)}")
 
 # ================= 🔥 MSAL FIX =================
 def _fixed_get_access_token(self):
