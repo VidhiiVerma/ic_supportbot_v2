@@ -55,11 +55,12 @@ adapter_settings = BotFrameworkAdapterSettings(
     channel_auth_tenant=MICROSOFT_APP_TENANT_ID,
 )
 adapter = BotFrameworkAdapter(adapter_settings)
+
+
 adapter.credentials = MicrosoftAppCredentials(
-    microsoft_app_id=MICROSOFT_APP_ID,
-    microsoft_app_password=MICROSOFT_APP_PASSWORD,
-    channel_auth_tenant=MICROSOFT_APP_TENANT_ID,
-    oauth_scope="https://api.botframework.com",
+    MICROSOFT_APP_ID,
+    MICROSOFT_APP_PASSWORD,
+    MICROSOFT_APP_TENANT_ID,
 )
 
 
