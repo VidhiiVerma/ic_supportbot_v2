@@ -17,11 +17,41 @@ from botbuilder.core import (
 from botbuilder.schema import Activity
 from botframework.connector.auth import MicrosoftAppCredentials
 
+import msal
+
 from app.services import get_rep_explanation
 from app.llm import LLM
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ================= ENV =================
+MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID")
+MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD")
+MICROSOFT_APP_TENANT_ID = os.getenv("MICROSOFT_APP_TENANT_ID")
+
+logger.info(f"APP_ID: {MICROSOFT_APP_ID}")
+logger.info(f"TENANT: {MICROSOFT_APP_TENANT_ID}")
+
+# ================= 🔥 MSAL FIX =================
+def _fixed_get_access_token(self):
+    app = msal.ConfidentialClientApplication(
+        client_id=MICROSOFT_APP_ID,
+        client_credential=MICROSOFT_APP_PASSWORD,
+        authority=f"https://login.microsoftonline.com/{MICROSOFT_APP_TENANT_ID}",
+    )
+
+    result = app.acquire_token_for_client(
+        scopes=["https://api.botframework.com/.default"]
+    )
+
+    if "access_token" not in result:
+        raise Exception(f"TOKEN FAILED: {result}")
+
+    return result["access_token"]
+
+# Override SDK broken method
+MicrosoftAppCredentials.get_access_token = _fixed_get_access_token
 
 # ================= APP =================
 app = FastAPI(title="IC Compensation Chatbot")
@@ -34,19 +64,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ================= ENV 
-MICROSOFT_APP_ID        = os.getenv("MICROSOFT_APP_ID")
-MICROSOFT_APP_PASSWORD  = os.getenv("MICROSOFT_APP_PASSWORD")
-MICROSOFT_APP_TENANT_ID = os.getenv("MICROSOFT_APP_TENANT_ID")
+# ================= ADAPTER =================
+adapter_settings = BotFrameworkAdapterSettings(
+    app_id=MICROSOFT_APP_ID,
+    app_password=MICROSOFT_APP_PASSWORD,
+    channel_auth_tenant=MICROSOFT_APP_TENANT_ID,
+)
 
-logger.info("BOT STARTUP — APP_ID: %s", MICROSOFT_APP_ID[:8] + "..." if MICROSOFT_APP_ID else "❌ MISSING")
-logger.info("BOT STARTUP — PASSWORD: %s", "✅ SET" if MICROSOFT_APP_PASSWORD else "❌ MISSING")
-logger.info("BOT STARTUP — TENANT_ID: %s", MICROSOFT_APP_TENANT_ID[:8] + "..." if MICROSOFT_APP_TENANT_ID else "❌ MISSING")
-
-
-# ================= 🔥 CRITICAL FIX =================
-# Force correct OAuth scope (matches your working curl test)
-MicrosoftAppCredentials.trust_service_url("https://smba.trafficmanager.net/teams/")
+adapter = BotFrameworkAdapter(adapter_settings)
 
 # ================= LLM =================
 llm = LLM()
@@ -57,18 +82,9 @@ try:
     from rag.pipeline import RAGSystem
     rag = RAGSystem()
     rag.load_or_build()
-    logger.info("RAG ready: %s vectors", rag.total_vectors)
+    logger.info(f"RAG ready: {rag.total_vectors} vectors")
 except Exception as e:
-    logger.warning("RAG disabled: %s", str(e))
-
-# ================= BOT ADAPTER =================
-adapter_settings = BotFrameworkAdapterSettings(
-    app_id=MICROSOFT_APP_ID,
-    app_password=MICROSOFT_APP_PASSWORD,
-    channel_auth_tenant=MICROSOFT_APP_TENANT_ID,
-)
-
-adapter = BotFrameworkAdapter(adapter_settings)
+    logger.warning(f"RAG disabled: {str(e)}")
 
 # ================= MODELS =================
 class AskRequest(BaseModel):
@@ -85,36 +101,28 @@ async def handle_teams_message(turn_context: TurnContext):
         message = (turn_context.activity.text or "").strip()
 
         if not message:
-            await turn_context.send_activity("Please send a message.")
+            await turn_context.send_activity("Send a message.")
             return
 
-        # 🔥 IMPORTANT: Teams user ID (string UUID)
-        rep_id = turn_context.activity.from_property.aad_object_id
-
-        if not rep_id:
-            await turn_context.send_activity("User ID not found.")
-            return
+        # 🔥 HARDCODED FOR TESTING
+        rep_id = "1150"
 
         reply = get_rep_explanation(rep_id, message, rag, llm)
 
-        await turn_context.send_activity(reply.strip()[:2000])
+        await turn_context.send_activity(reply[:2000])
 
     except Exception as e:
-        logger.error("Teams handler error: %s", str(e), exc_info=True)
-        await turn_context.send_activity("Error processing your request.")
+        logger.error("Teams error", exc_info=True)
+        await turn_context.send_activity("Error occurred.")
 
 # ================= ROUTES =================
 @app.get("/")
 def root():
-    return {"message": "IC Compensation Chatbot is running"}
+    return {"message": "API running"}
 
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "rag_enabled": rag is not None,
-        "rag_vectors": rag.total_vectors if rag else 0,
-    }
+    return {"status": "ok"}
 
 @app.post("/api/messages")
 async def messages(req: Request):
@@ -132,21 +140,14 @@ async def messages(req: Request):
         return response or Response(status_code=201)
 
     except Exception as e:
-        logger.error("Bot endpoint error: %s", str(e), exc_info=True)
+        logger.error("Bot error", exc_info=True)
         raise HTTPException(status_code=500, detail="Bot failed")
 
 @app.post("/ask", response_model=AskResponse)
 def ask(data: AskRequest):
     try:
-        if not data.rep_id or not data.query:
-            raise HTTPException(status_code=400, detail="rep_id and query required")
-
         result = get_rep_explanation(data.rep_id, data.query, rag, llm)
-
         return AskResponse(text=result.strip())
-
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error("Ask error: %s", str(e), exc_info=True)
+        logger.error("Ask error", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal error")

@@ -27,3 +27,4 @@ langchain-openai
 faiss-cpu
 
 databricks-sql-connector
+msal
