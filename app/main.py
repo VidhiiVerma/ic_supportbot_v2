@@ -25,7 +25,7 @@ from app.llm import LLM
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ================= ENV =================
+# ENV
 MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID")
 MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD")
 MICROSOFT_APP_TENANT_ID = os.getenv("MICROSOFT_APP_TENANT_ID")
@@ -34,7 +34,7 @@ logger.info(f"APP_ID: {MICROSOFT_APP_ID}")
 logger.info(f"TENANT: {MICROSOFT_APP_TENANT_ID}")
 logger.info(f"PASSWORD LENGTH: {len(MICROSOFT_APP_PASSWORD)}")
 
-# ================= 🔥 MSAL FIX =================
+# MSAL FIX
 def _fixed_get_access_token(self):
     app = msal.ConfidentialClientApplication(
         client_id=MICROSOFT_APP_ID,
@@ -54,7 +54,7 @@ def _fixed_get_access_token(self):
 # Override SDK broken method
 MicrosoftAppCredentials.get_access_token = _fixed_get_access_token
 
-# ================= APP =================
+# APP
 app = FastAPI(title="IC Compensation Chatbot")
 
 app.add_middleware(
@@ -65,7 +65,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ================= ADAPTER =================
+# ADAPTER
 adapter_settings = BotFrameworkAdapterSettings(
     app_id=MICROSOFT_APP_ID,
     app_password=MICROSOFT_APP_PASSWORD,
@@ -74,10 +74,10 @@ adapter_settings = BotFrameworkAdapterSettings(
 
 adapter = BotFrameworkAdapter(adapter_settings)
 
-# ================= LLM =================
+# LLM
 llm = LLM()
 
-# ================= RAG =================
+# RAG
 rag = None
 try:
     from rag.pipeline import RAGSystem
@@ -87,7 +87,7 @@ try:
 except Exception as e:
     logger.warning(f"RAG disabled: {str(e)}")
 
-# ================= MODELS =================
+# MODELS
 class AskRequest(BaseModel):
     query: str
     rep_id: str
@@ -96,7 +96,7 @@ class AskResponse(BaseModel):
     text: str
     status: str = "success"
 
-# ================= TEAMS HANDLER =================
+# TEAMS HANDLER
 async def handle_teams_message(turn_context: TurnContext):
     try:
         message = (turn_context.activity.text or "").strip()
@@ -105,7 +105,7 @@ async def handle_teams_message(turn_context: TurnContext):
             await turn_context.send_activity("Send a message.")
             return
 
-        # 🔥 HARDCODED FOR TESTING
+        # HARDCODED FOR TESTING
         rep_id = "1150"
 
         reply = get_rep_explanation(rep_id, message, rag, llm)
@@ -116,7 +116,7 @@ async def handle_teams_message(turn_context: TurnContext):
         logger.error("Teams error", exc_info=True)
         await turn_context.send_activity("Error occurred.")
 
-# ================= ROUTES =================
+# ROUTES
 @app.get("/")
 def root():
     return {"message": "API running"}

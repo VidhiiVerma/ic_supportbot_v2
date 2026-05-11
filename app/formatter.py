@@ -51,7 +51,6 @@ def format_number(value) -> str:
 def format_percentage(value) -> str:
     try:
         v = float(value)
-        # Normalize: if v > 1, assume it's already a percentage (e.g. 100)
         if v > 1:
             v = v / 100
         return f"{v * 100:.0f}%"
@@ -68,7 +67,7 @@ def format_rate(value) -> str:
 
 def format_value(field: str, value) -> str:
     """
-    Format a calc/payout value based on its field name.
+    Format a payout value based on its field name.
 
     Usage:
         format_value("total_ic", 10490.0)   → "$10,490"
@@ -90,7 +89,6 @@ def format_value(field: str, value) -> str:
     if f in INTEGER_FIELDS:
         return format_number(value)
 
-    # default: return clean string (strip unnecessary .0)
     try:
         v = float(value)
         return str(int(v)) if v == int(v) else str(v)

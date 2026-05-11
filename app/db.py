@@ -32,7 +32,7 @@ if not DATABRICKS_TOKEN:
 logger.info("Databricks config loaded")
 
 
-# ================= CONNECTION =================
+#  CONNECTION 
 def get_connection():
     return sql.connect(
         server_hostname=DATABRICKS_HOST,
@@ -41,7 +41,7 @@ def get_connection():
     )
 
 
-# ================= QUERY EXECUTION =================
+#  QUERY EXECUTION 
 def fetch_df(query: str, params: tuple = ()) -> pd.DataFrame:
     import time
     max_retries = 3
@@ -76,12 +76,12 @@ def fetch_df(query: str, params: tuple = ()) -> pd.DataFrame:
                 raise
 
 
-# ================= MAIN DATA FETCH =================
+# MAIN 
 def get_rep_data(rep_id: str):
     try:
         rep_id = int(rep_id)
 
-        # -------- PAYOUT --------
+        # PAYOUT 
         payout_query = """
         SELECT *
         FROM ic_implementation.ic_intelligence.payout_summary
@@ -96,7 +96,7 @@ def get_rep_data(rep_id: str):
         payout = payout_df.iloc[0].to_dict()
         rep_name = payout.get("rep_name")
 
-        # -------- ELIGIBILITY --------
+        # ELIGIBILITY 
         eligibility = {}
 
         if rep_name:
@@ -115,7 +115,7 @@ def get_rep_data(rep_id: str):
             except Exception:
                 eligibility = {}
 
-        # -------- SALES CREDITING --------
+        #  SALES CREDITING 
         sales_query = """
         SELECT *
         FROM ic_implementation.ic_intelligence.sales_crediting
@@ -125,7 +125,7 @@ def get_rep_data(rep_id: str):
         sales_df = fetch_df(sales_query, (rep_id,))
         sales = sales_df.to_dict(orient="records")
 
-        # -------- FINAL OUTPUT --------
+        #  FINAL OUTPUT 
         return {
             "payout": payout,
             "eligibility": eligibility,
