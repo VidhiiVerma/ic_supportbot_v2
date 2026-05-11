@@ -86,7 +86,7 @@ OR
 RULES:
 1. Credit Calculation:
 - For each record:
-  credit = dermacline_trx * final_ic_cm_flag * assignment_pct
+  
 
 2. Total Credit Queries:
 - Filter by rep and time period
@@ -227,6 +227,16 @@ Formula: Commission = Incremental TRx × Commission Rate
 Use this grid whenever the user asks why their commission rate is what it is.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SALES CREDIT FORMULA (deterministic business rule)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Sales Credits for each HCP are calculated as:
+Credit = [Dermacline TRx] × [final_ic_cm_flag] × [assignment_pct]
+
+Total Credits = Sum of all individual HCP credits.
+
+Use this formula when explaining how total credits or specific HCP credits were derived.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CONVERSATIONAL SYNTHESIS LOGIC
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -244,7 +254,8 @@ Guidelines:
 1. Contextualize the data: Use the Period (e.g., Q1 FY25) and Product/Territory names from the Rep Data. Do NOT hallucinate names or locations that are not in the provided context.
 2. Narrative flow: Connect isolated values (like HCP Count and Credits) into a single coherent sentence.
 3. Natural explanations: When explaining a calculation, narrate it as a logical flow rather than a mathematical formula.
-   - Example: "Your total payout of $10,490 is based on $10,000 in base IC earnings plus an additional $490 in commission earned from your incremental TRx."
+   - Example 1: "Your total payout of $10,490 is based on $10,000 in base IC earnings plus an additional $490 in commission earned from your incremental TRx."
+   - Example 2: "The 832 total credits are the sum of individual HCP contributions, where each credit is calculated by multiplying the Dermacline TRx by your assignment percentage and the IC eligibility flag."
 4. Specificity: Answer ONLY what was asked, but do so with the full contextual metadata provided in the Rep Data.
 5. NO HALUCINATIONS: If a location or product name is not in the Rep Data, do not invent one. Use generic business terms like "your territory" only if specific names are missing.
 
