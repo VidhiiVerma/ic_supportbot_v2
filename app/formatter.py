@@ -101,7 +101,21 @@ def format_calc_for_llm(calc: dict) -> str:
     Returns a human-readable, properly formatted string
     of all calc fields — used when passing data to the LLM.
     """
+    if not calc:
+        return "data not available"
     lines = []
     for field, value in calc.items():
         lines.append(f"{field}: {format_value(field, value)}")
+    return "\n".join(lines)
+
+
+def format_dict_for_llm(data: dict) -> str:
+    """
+    Format a generic dictionary (payout, eligibility) for the LLM.
+    """
+    if not data:
+        return "data not available"
+    lines = []
+    for k, v in data.items():
+        lines.append(f"{k}: {format_value(k, v)}")
     return "\n".join(lines)

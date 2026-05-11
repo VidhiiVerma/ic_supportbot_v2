@@ -30,45 +30,43 @@ def build_hcp_totals(rows):
 
     for row in rows:
         credit = calculate_credit(row)
+        raw_trx = float(row.get("dermacline_trx", 0))
 
-        if credit <= 0:
+        if credit <= 0 and raw_trx <= 0:
             continue
 
         hcp_name = str(row.get("hcp_name", "Unknown HCP")).strip()
 
-        hcp_totals[hcp_name] = (
-            hcp_totals.get(hcp_name, 0) + credit
-        )
+        if hcp_name not in hcp_totals:
+            hcp_totals[hcp_name] = {"credit": 0, "raw_trx": 0}
+
+        hcp_totals[hcp_name]["credit"] += credit
+        hcp_totals[hcp_name]["raw_trx"] += raw_trx
 
     return hcp_totals
 
 
 def get_total_credits(rows, question):
     rows = filter_by_month(rows, question)
-
     totals = build_hcp_totals(rows)
-
-    total_credit = sum(totals.values())
-
+    total_credit = sum(t["credit"] for t in totals.values())
     return f"Total credits: {format_number(total_credit)}"
 
 
 def get_hcp_credit_breakdown(rows, question):
     rows = filter_by_month(rows, question)
-
     totals = build_hcp_totals(rows)
 
     if not totals:
         return "No credits found."
 
     lines = []
-
-    for idx, (name, value) in enumerate(
+    for idx, (name, stats) in enumerate(
         sorted(totals.items()),
         start=1
     ):
         lines.append(
-            f"{idx}. {name}: {format_number(value)}"
+            f"{idx}. {name}: {format_number(stats['credit'])} credits (from {format_number(stats['raw_trx'])} raw TRx)"
         )
 
     return "\n".join(lines)

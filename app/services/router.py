@@ -121,6 +121,8 @@ def get_rep_explanation(
 
     # ---------------- BUILD PROMPT ---------------- #
 
+    from app.formatter import format_dict_for_llm
+    
     prompt = ORCHESTRATION_PROMPT.format(
         conversation_history=conversation_history,
 
@@ -129,10 +131,10 @@ PRODUCT: {product}
 PERIOD: {period}
 
 PAYOUT DATA:
-{payout}
+{format_dict_for_llm(payout)}
 
 ELIGIBILITY DATA:
-{eligibility}
+{format_dict_for_llm(eligibility)}
 
 CALCULATED VALUES:
 {formatted_calc}
