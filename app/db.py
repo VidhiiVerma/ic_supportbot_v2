@@ -5,6 +5,7 @@ import os
 import logging
 import pandas as pd
 from databricks import sql
+import threading
 
 # LOGGER SETUP
 logging.basicConfig(level=logging.INFO)
@@ -76,56 +77,76 @@ def fetch_df(query: str, params: tuple = ()) -> pd.DataFrame:
                 raise
 
 
+#  WAKE UP WAREHOUSE (Non-blocking)
+def _wakeup():
+    """Triggers warehouse start during server boot."""
+    try:
+        logger.info("Triggering Databricks warm-up...")
+        fetch_df("SELECT 1")
+        logger.info("Databricks warehouse is warm.")
+    except Exception:
+        # Expected if warehouse is still starting
+        pass
+
+threading.Thread(target=_wakeup, daemon=True).start()
+
+
+def _get_columns(cursor_description):
+    return [
+        col[0].lower().strip().replace(" ", "_").replace("(", "").replace(")", "")
+        for col in cursor_description
+    ]
+
+
 # MAIN 
 def get_rep_data(rep_id: str):
+    """
+    Fetches all rep data in a single connection session to save time.
+    """
     try:
         rep_id = int(rep_id)
 
-        # PAYOUT 
-        payout_query = """
-        SELECT *
-        FROM ic_implementation.ic_intelligence.payout_summary
-        WHERE `Rep ID` = ?
-        """
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                # 1. PAYOUT 
+                payout_query = """
+                SELECT *
+                FROM ic_implementation.ic_intelligence.payout_summary
+                WHERE `Rep ID` = ?
+                """
+                cursor.execute(payout_query, (rep_id,))
+                payout_df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
 
-        payout_df = fetch_df(payout_query, (rep_id,))
+                if payout_df.empty:
+                    return None
 
-        if payout_df.empty:
-            return None
+                payout = payout_df.iloc[0].to_dict()
+                rep_name = payout.get("rep_name")
 
-        payout = payout_df.iloc[0].to_dict()
-        rep_name = payout.get("rep_name")
-
-        # ELIGIBILITY 
-        eligibility = {}
-
-        if rep_name:
-            eligibility_query = """
-            SELECT *
-            FROM ic_implementation.ic_intelligence.eligibility_2
-            WHERE LOWER(TRIM(rep_name)) = LOWER(TRIM(?))
-            """
-
-            try:
-                eligibility_df = fetch_df(eligibility_query, (rep_name,))
-
-                if not eligibility_df.empty:
-                    eligibility = eligibility_df.iloc[0].to_dict()
-
-            except Exception:
+                # 2. ELIGIBILITY 
                 eligibility = {}
+                if rep_name:
+                    eligibility_query = """
+                    SELECT *
+                    FROM ic_implementation.ic_intelligence.eligibility_2
+                    WHERE LOWER(TRIM(rep_name)) = LOWER(TRIM(?))
+                    """
+                    cursor.execute(eligibility_query, (rep_name,))
+                    eligibility_df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
+                    
+                    if not eligibility_df.empty:
+                        eligibility = eligibility_df.iloc[0].to_dict()
 
-        #  SALES CREDITING 
-        sales_query = """
-        SELECT *
-        FROM ic_implementation.ic_intelligence.sales_crediting
-        WHERE assignment_emp = ?
-        """
+                # 3. SALES CREDITING 
+                sales_query = """
+                SELECT *
+                FROM ic_implementation.ic_intelligence.sales_crediting
+                WHERE assignment_emp = ?
+                """
+                cursor.execute(sales_query, (rep_id,))
+                sales_df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
+                sales = sales_df.to_dict(orient="records")
 
-        sales_df = fetch_df(sales_query, (rep_id,))
-        sales = sales_df.to_dict(orient="records")
-
-        #  FINAL OUTPUT 
         return {
             "payout": payout,
             "eligibility": eligibility,
