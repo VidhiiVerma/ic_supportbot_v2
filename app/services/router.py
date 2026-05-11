@@ -28,7 +28,7 @@ from services.policy import (
 )
 
 
-def get_rep_response(
+def get_rep_explanation(
     rep_id,
     question,
     rag,
@@ -80,7 +80,10 @@ def get_rep_response(
                 "sum",
             )
         ):
-            return get_total_credits(rows, question)
+            return get_total_credits(
+                rows,
+                question,
+            )
 
         return get_hcp_credit_breakdown(
             rows,
@@ -99,7 +102,12 @@ def get_rep_response(
                 "total",
             )
         ):
-            return str(count_unique_hcps(rows))
+            total_hcps = count_unique_hcps(rows)
+
+            return (
+                f"Total unique HCPs: "
+                f"{total_hcps}"
+            )
 
         if "include" in q:
             return check_hcp_inclusion(

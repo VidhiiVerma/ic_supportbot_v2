@@ -19,7 +19,7 @@ from botframework.connector.auth import MicrosoftAppCredentials
 
 import msal
 
-from app.services import get_rep_explanation
+from app.services.router import get_rep_explanation
 from app.llm import LLM
 
 logging.basicConfig(level=logging.INFO)
