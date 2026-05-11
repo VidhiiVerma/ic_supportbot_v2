@@ -105,6 +105,12 @@ def get_rep_explanation(
     policy_context = rag.get_context(rag_query) if rag else ""
 
 
+    # ---------------- METADATA EXTRACTION ---------------- #
+
+    # Try to find Product and Period in payout or eligibility data
+    product = payout.get("product_name") or eligibility.get("product") or "Dermacline"
+    period  = payout.get("period") or eligibility.get("period") or "this quarter"
+
     # ---------------- CONVERSATION HISTORY ---------------- #
 
     conversation_history = (
@@ -119,6 +125,9 @@ def get_rep_explanation(
         conversation_history=conversation_history,
 
         rep_data=f"""
+PRODUCT: {product}
+PERIOD: {period}
+
 PAYOUT DATA:
 {payout}
 
@@ -128,11 +137,9 @@ ELIGIBILITY DATA:
 CALCULATED VALUES:
 {formatted_calc}
 
-HCP COUNT:
-{total_hcps}
+HCP COUNT: {total_hcps}
 
-TOTAL CREDITS:
-{total_credits}
+TOTAL CREDITS: {total_credits}
 
 HCP CREDIT BREAKDOWN:
 {hcp_breakdown}
