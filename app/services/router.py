@@ -73,12 +73,15 @@ def get_rep_explanation(
     if "credit" in intents:
 
         if any(
-            t in q
-            for t in (
-                "how many",
-                "total",
-                "sum",
-            )
+          t in q
+          for t in (
+            "how many",
+            "total",
+            "sum",
+            "my credits",
+            "what is my credits",
+            "credits",
+        )
         ):
             return get_total_credits(
                 rows,
@@ -105,7 +108,6 @@ def get_rep_explanation(
             total_hcps = count_unique_hcps(rows)
 
             return (
-                f"Total unique HCPs: "
                 f"{total_hcps}"
             )
 
