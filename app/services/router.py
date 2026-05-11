@@ -4,7 +4,7 @@ from app.services.intent import detect_intents
 
 from app.services.payout import get_direct_data
 
-from services.hcp import (
+from app.services.hcp import (
     get_total_credits,
     get_hcp_credit_breakdown,
     get_hcp_names,
