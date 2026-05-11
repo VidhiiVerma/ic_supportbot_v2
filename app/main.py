@@ -48,6 +48,10 @@ def _fixed_get_access_token(self):
 
     return result["access_token"]
 
+from app.conversation_memory import (
+    conversation_memory,
+)
+
 # Override SDK broken method
 MicrosoftAppCredentials.get_access_token = _fixed_get_access_token
 
@@ -100,6 +104,8 @@ async def handle_teams_message(turn_context: TurnContext):
 
         user_name = turn_context.activity.from_property.name
         user_id = turn_context.activity.from_property.id
+        if user_id not in conversation_memory:
+           conversation_memory[user_id] = {}
         message = (turn_context.activity.text or "").strip()
 
         logger.info(f"User Name: {user_name}")
@@ -127,6 +133,7 @@ async def handle_teams_message(turn_context: TurnContext):
             message,
             rag,
             llm,
+            conversation_memory[user_id],
         )
 
         logger.info(f"Bot Reply: {reply}")
@@ -175,7 +182,13 @@ async def messages(req: Request):
 @app.post("/ask", response_model=AskResponse)
 def ask(data: AskRequest):
     try:
-        result = get_rep_explanation(data.rep_id, data.query, rag, llm)
+        result = get_rep_explanation(
+            data.rep_id,
+            data.query,
+            rag,
+            llm,
+            {},
+        )
         return AskResponse(text=result.strip())
     except Exception as e:
         logger.error("Ask error", exc_info=True)
