@@ -1,8 +1,8 @@
 from app.db import get_rep_data
 
-from services.intent import detect_intents
+from app.services.intent import detect_intents
 
-from services.payout import get_direct_data
+from app.services.payout import get_direct_data
 
 from services.hcp import (
     get_total_credits,
@@ -12,18 +12,18 @@ from services.hcp import (
     check_hcp_inclusion,
 )
 
-from services.eligibility import (
+from app.services.eligibility import (
     build_eligibility_response,
 )
 
-from services.calculation import calculate_ic
+from app.services.calculation import calculate_ic
 
-from services.explanation import (
+from app.services.explanation import (
     generate_explanation,
     generate_why_response,
 )
 
-from services.policy import (
+from app.services.policy import (
     generate_policy_response,
 )
 

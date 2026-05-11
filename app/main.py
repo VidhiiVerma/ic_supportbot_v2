@@ -99,22 +99,53 @@ class AskResponse(BaseModel):
 # TEAMS HANDLER
 async def handle_teams_message(turn_context: TurnContext):
     try:
+        logger.info("===== NEW TEAMS MESSAGE =====ok")
+
+        user_name = turn_context.activity.from_property.name
+        user_id = turn_context.activity.from_property.id
         message = (turn_context.activity.text or "").strip()
 
+        logger.info(f"User Name: {user_name}")
+        logger.info(f"User ID: {user_id}")
+        logger.info(f"Message Received: {message}")
+
         if not message:
-            await turn_context.send_activity("Send a message.")
+            logger.info("Empty message received")
+
+            await turn_context.send_activity(
+                "Send a message."
+            )
+
             return
 
         # HARDCODED FOR TESTING
         rep_id = "1150"
 
-        reply = get_rep_explanation(rep_id, message, rag, llm)
+        logger.info(f"Using Rep ID: {rep_id}")
+
+        logger.info("Calling get_rep_explanation")
+
+        reply = get_rep_explanation(
+            rep_id,
+            message,
+            rag,
+            llm,
+        )
+
+        logger.info(f"Bot Reply: {reply}")
+
+        logger.info("Sending response to Teams")
 
         await turn_context.send_activity(reply[:2000])
 
+        logger.info("Response sent successfully")
+
     except Exception as e:
         logger.error("Teams error", exc_info=True)
-        await turn_context.send_activity("Error occurred.")
+
+        await turn_context.send_activity(
+            "Error occurred."
+        )
 
 # ROUTES
 @app.get("/")
