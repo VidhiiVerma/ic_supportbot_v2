@@ -51,42 +51,42 @@ User:
 what my payout
 
 Output:
-{
+{{
   "intent": "payout",
   "field": "total_ic_payout"
-}
+}}
 
 User:
 how is my payout calculated
 
 Output:
-{
+{{
   "intent": "payout_explanation",
   "field": "total_ic_payout"
-}
+}}
 
 User:
 how many hcps
 
 Output:
-{
+{{
   "intent": "hcp_count",
   "field": null
-}
+}}
 
 User:
 what are these numbers
 
 Memory:
-{
+{{
   "last_intent": "payout_explanation"
-}
+}}
 
 Output:
-{
+{{
   "intent": "follow_up",
   "field": "ic_earnings_value"
-}
+}}
 
 Conversation Memory:
 {memory}
@@ -94,7 +94,6 @@ Conversation Memory:
 User Question:
 {question}
 """
-
 
 def classify_query(
     question,
