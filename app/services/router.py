@@ -19,7 +19,47 @@ from app.conversation_memory import (
 )
 
 
+
+# Follow-up signals that indicate the user is asking about a previous response
+_FOLLOWUP_SIGNALS = {
+    "why", "how", "explain", "what is this", "what are these",
+    "tell me more", "what does this mean", "reason", "because",
+    "what is the reason", "why only", "why is it", "why was",
+}
+
+
+def _build_rag_query(question: str, memory: dict) -> str:
+    """
+    For follow-up questions, enrich the RAG query with the last assistant
+    response so the vector retrieval finds the right policy section.
+
+    Example:
+        question = "why commission rate is 10 only"
+        last_response = "Commission: 49 TRx x $10/TRx = $490"
+        rag_query = "why commission rate is 10 only\nContext: Commission: 49 TRx x $10/TRx = $490"
+    """
+    q_lower = question.lower()
+    is_followup = any(signal in q_lower for signal in _FOLLOWUP_SIGNALS)
+
+    if not is_followup:
+        return question
+
+    history = (memory or {}).get("history", [])
+    # Find the most recent assistant turn
+    last_assistant = next(
+        (t["content"] for t in reversed(history) if t["role"] == "assistant"),
+        None,
+    )
+
+    if last_assistant:
+        # Append last response as context to improve RAG retrieval accuracy
+        return f"{question}\nContext: {last_assistant}"
+
+    return question
+
+
 def get_rep_explanation(
+
     rep_id,
     question,
     rag,
@@ -59,9 +99,11 @@ def get_rep_explanation(
     hcp_breakdown = get_hcp_credit_breakdown(rows, question)
     hcp_names     = get_hcp_names(rows)
 
-    # ---------------- POLICY CONTEXT ---------------- #
+    # ---------------- POLICY CONTEXT (context-aware RAG query) ---------------- #
 
-    policy_context = rag.get_context(question) if rag else ""
+    rag_query = _build_rag_query(question, memory)
+    policy_context = rag.get_context(rag_query) if rag else ""
+
 
     # ---------------- CONVERSATION HISTORY ---------------- #
 
