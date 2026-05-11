@@ -1,12 +1,8 @@
 from app.db import get_rep_data
 
-from app.prompts import (
-    ORCHESTRATION_PROMPT,
-)
+from app.prompts import ORCHESTRATION_PROMPT
 
-from app.services.calculation import (
-    calculate_ic,
-)
+from app.services.calculation import calculate_ic
 
 from app.services.hcp import (
     get_total_credits,
@@ -15,8 +11,11 @@ from app.services.hcp import (
     count_unique_hcps,
 )
 
-from app.formatter import (
-    format_calc_for_llm,
+from app.formatter import format_calc_for_llm
+
+from app.conversation_memory import (
+    format_history_for_prompt,
+    save_turn,
 )
 
 
@@ -27,7 +26,6 @@ def get_rep_explanation(
     llm,
     memory=None,
 ):
-
     # ---------------- FETCH DATA ---------------- #
 
     rep_data = get_rep_data(rep_id)
@@ -35,20 +33,9 @@ def get_rep_explanation(
     if not rep_data:
         return "No data found for this rep."
 
-    payout = rep_data.get(
-        "payout",
-        {},
-    )
-
-    eligibility = rep_data.get(
-        "eligibility",
-        {},
-    )
-
-    sales_rows = rep_data.get(
-        "sales",
-        [],
-    )
+    payout = rep_data.get("payout", {})
+    eligibility = rep_data.get("eligibility", {})
+    sales_rows = rep_data.get("sales", [])
 
     rows = [
         r for r in sales_rows
@@ -67,48 +54,29 @@ def get_rep_explanation(
 
     # ---------------- HCP / CREDIT DATA ---------------- #
 
-    total_hcps = count_unique_hcps(rows)
-
-    total_credits = get_total_credits(
-        rows,
-        question,
-    )
-
-    hcp_breakdown = get_hcp_credit_breakdown(
-        rows,
-        question,
-    )
-
-    hcp_names = get_hcp_names(rows)
+    total_hcps   = count_unique_hcps(rows)
+    total_credits = get_total_credits(rows, question)
+    hcp_breakdown = get_hcp_credit_breakdown(rows, question)
+    hcp_names     = get_hcp_names(rows)
 
     # ---------------- POLICY CONTEXT ---------------- #
 
-    policy_context = (
-        rag.get_context(question)
-        if rag
-        else ""
-    )
+    policy_context = rag.get_context(question) if rag else ""
 
     # ---------------- CONVERSATION HISTORY ---------------- #
 
-    conversation_history = ""
+    conversation_history = (
+        format_history_for_prompt(memory)
+        if memory
+        else "No prior conversation."
+    )
 
-    if memory:
-
-        history = memory.get(
-            "history",
-            [],
-        )
-
-        conversation_history = "\n".join(history)
-
-    # ---------------- BUILD FULL CONTEXT ---------------- #
+    # ---------------- BUILD PROMPT ---------------- #
 
     prompt = ORCHESTRATION_PROMPT.format(
         conversation_history=conversation_history,
 
         rep_data=f"""
-
 PAYOUT DATA:
 {payout}
 
@@ -129,11 +97,8 @@ HCP CREDIT BREAKDOWN:
 
 HCP NAMES:
 {hcp_names}
-
 """,
-
         policy_context=policy_context,
-
         question=question,
     )
 
@@ -141,22 +106,26 @@ HCP NAMES:
 
     response = llm.generate(prompt)
 
-    # ---------------- SAVE MEMORY ---------------- #
+    # ---------------- SAVE TO STRUCTURED MEMORY ---------------- #
 
     if memory is not None:
+        # Build a clean snapshot of this turn's numbers for follow-up resolution
+        data_snapshot = calc if calc else {}
+        if payout:
+            data_snapshot.update({
+                k: payout[k]
+                for k in (
+                    "qtd_trx", "qtd_trx_goal", "target_pay",
+                    "ic_earning_rate", "ic_earnings_rate",
+                )
+                if k in payout
+            })
 
-        if "history" not in memory:
-            memory["history"] = []
-
-        memory["history"].append(
-            f"User: {question}"
+        save_turn(
+            memory=memory,
+            question=question,
+            response=response,
+            data_snapshot=data_snapshot,
         )
-
-        memory["history"].append(
-            f"Assistant: {response}"
-        )
-
-        # keep only recent history
-        memory["history"] = memory["history"][-10:]
 
     return response

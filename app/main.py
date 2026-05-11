@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import re
 import logging
 
 from fastapi import FastAPI, Request, HTTPException
@@ -48,9 +49,7 @@ def _fixed_get_access_token(self):
 
     return result["access_token"]
 
-from app.conversation_memory import (
-    conversation_memory,
-)
+from app.conversation_memory import conversation_memory
 
 # Override SDK broken method
 MicrosoftAppCredentials.get_access_token = _fixed_get_access_token
@@ -98,6 +97,11 @@ class AskResponse(BaseModel):
     status: str = "success"
 
 # TEAMS HANDLER
+def _strip_html(text: str) -> str:
+    """Strip HTML tags that Teams injects into rich-text messages (e.g. <div>, <p>)."""
+    return re.sub(r'<[^>]+>', '', text or '').strip()
+
+
 async def handle_teams_message(turn_context: TurnContext):
     try:
         logger.info("===== NEW TEAMS MESSAGE =====ok")
@@ -106,7 +110,7 @@ async def handle_teams_message(turn_context: TurnContext):
         user_id = turn_context.activity.from_property.id
         if user_id not in conversation_memory:
            conversation_memory[user_id] = {}
-        message = (turn_context.activity.text or "").strip()
+        message = _strip_html(turn_context.activity.text or "")
 
         logger.info(f"User Name: {user_name}")
         logger.info(f"User ID: {user_id}")
