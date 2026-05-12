@@ -15,6 +15,7 @@ PERCENT_FIELDS = {
     "ic_earnings_rate",
     "qtd_ic_earnings_rate",
     "assignment_pct",
+    "assignment",
     "new_hire_eligibility",
     "ic_eligibility",
     "total_eligibility",
@@ -38,12 +39,14 @@ DECIMAL_FIELDS = {
     "credited_trx",
 }
 
+
 def format_decimal(value) -> str:
     try:
         v = float(value)
         return f"{v:,.1f}" if not v.is_integer() else f"{v:,.0f}"
     except Exception:
         return str(value)
+
 
 def format_currency(value) -> str:
     try:
@@ -62,9 +65,12 @@ def format_number(value) -> str:
 def format_percentage(value) -> str:
     try:
         v = float(value)
-        if v > 1:
-            v = v / 100
-        return f"{v * 100:.0f}%"
+
+        if v <= 1:
+            v = v * 100
+
+        return f"{v:.0f}%"
+
     except Exception:
         return str(value)
 
@@ -77,15 +83,7 @@ def format_rate(value) -> str:
 
 
 def format_value(field: str, value) -> str:
-    """
-    Format a payout value based on its field name.
 
-    Usage:
-        format_value("total_ic", 10490.0)   → "$10,490"
-        format_value("ic_earning_rate", 1.0) → "100%"
-        format_value("rate", 10)             → "$10 per TRx"
-        format_value("qtd_trx", 466.0)       → "466"
-    """
     if value is None:
         return "data not available"
 
@@ -93,42 +91,48 @@ def format_value(field: str, value) -> str:
 
     if f in CURRENCY_FIELDS:
         return format_currency(value)
+
     if f in PERCENT_FIELDS:
         return format_percentage(value)
+
     if f in RATE_FIELDS:
         return format_rate(value)
+
     if f in DECIMAL_FIELDS:
         return format_decimal(value)
+
     if f in INTEGER_FIELDS:
         return format_number(value)
 
     try:
         v = float(value)
         return str(int(v)) if v == int(v) else str(v)
+
     except Exception:
         return str(value)
 
 
 def format_calc_for_llm(calc: dict) -> str:
-    """
-    Returns a human-readable, properly formatted string
-    of all calc fields — used when passing data to the LLM.
-    """
+
     if not calc:
         return "data not available"
+
     lines = []
+
     for field, value in calc.items():
         lines.append(f"{field}: {format_value(field, value)}")
+
     return "\n".join(lines)
 
 
 def format_dict_for_llm(data: dict) -> str:
-    """
-    Format a generic dictionary (payout, eligibility) for the LLM.
-    """
+
     if not data:
         return "data not available"
+
     lines = []
+
     for k, v in data.items():
         lines.append(f"{k}: {format_value(k, v)}")
+
     return "\n".join(lines)
