@@ -41,17 +41,10 @@ DECIMAL_FIELDS = {
 
 def format_decimal(value) -> str:
     try:
-        s = str(value).strip()
-        v = float(s)
-        if "." in s:
-            decimal_part = s.split(".")[1].rstrip("0")
-            if decimal_part:
-                whole = f"{int(v):,}"
-                return f"{whole}.{decimal_part}"
-            else:
-                return f"{int(v):,}"
-        else:
-            return f"{int(v):,}"
+        v = float(value)
+        # Format with commas and up to 10 decimal places, then strip trailing zeros
+        formatted = f"{v:,.10f}".rstrip("0").rstrip(".")
+        return formatted
     except Exception:
         return str(value)
 

@@ -2,6 +2,13 @@ from app.formatter import format_number
 
 
 def calculate_credit(row):
+    # STEP 1: Use pre-calculated credits if available (Source of Truth)
+    if "credits" in row and row["credits"] is not None:
+        return float(row["credits"])
+    if "credited_trx" in row and row["credited_trx"] is not None:
+        return float(row["credited_trx"])
+
+    # STEP 2: Fallback to manual calculation if column is missing
     try:
         trx = float(row.get("dermacline_trx", 0))
         flag = float(row.get("final_ic_cm_flag", 0))
@@ -30,30 +37,42 @@ def build_hcp_totals(rows):
 
     for row in rows:
         credit = calculate_credit(row)
+        
+        # We still check dermacline_trx for inclusion logic, but we don't display it
         raw_trx = float(row.get("dermacline_trx", 0))
 
         if credit <= 0 and raw_trx <= 0:
             continue
 
         hcp_name = str(row.get("hcp_name", "Unknown HCP")).strip()
+        reason = str(row.get("reason", "")).strip()
 
         if hcp_name not in hcp_totals:
-            hcp_totals[hcp_name] = {"credit": 0, "raw_trx": 0}
+            hcp_totals[hcp_name] = {
+                "credit": 0, 
+                "raw_trx": 0, 
+                "reasons": set()
+            }
 
         hcp_totals[hcp_name]["credit"] += credit
         hcp_totals[hcp_name]["raw_trx"] += raw_trx
+        
+        if reason and reason.lower() != "none" and reason.lower() != "nan":
+            hcp_totals[hcp_name]["reasons"].add(reason)
 
     return hcp_totals
 
 
 def get_total_credits(rows, question):
+    from app.formatter import format_decimal
     rows = filter_by_month(rows, question)
     totals = build_hcp_totals(rows)
     total_credit = sum(t["credit"] for t in totals.values())
-    return f"Total credits: {format_number(total_credit)}"
+    return f"Total credits: {format_decimal(total_credit)}"
 
 
 def get_hcp_credit_breakdown(rows, question):
+    from app.formatter import format_decimal
     rows = filter_by_month(rows, question)
     totals = build_hcp_totals(rows)
 
@@ -65,8 +84,14 @@ def get_hcp_credit_breakdown(rows, question):
         sorted(totals.items()),
         start=1
     ):
+        reason_part = ""
+        if stats["reasons"]:
+            reasons = sorted(list(stats["reasons"]))
+            reason_part = f" (Reason: {', '.join(reasons)})"
+
+        # Note: raw TRx is intentionally omitted to follow prompt instructions
         lines.append(
-            f"{idx}. {name}: {format_number(stats['credit'])} credits (from {format_number(stats['raw_trx'])} raw TRx)"
+            f"{idx}. {name}: {format_decimal(stats['credit'])} TRx sales credits{reason_part}"
         )
 
     return "\n".join(lines)
