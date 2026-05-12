@@ -71,7 +71,7 @@ def format_percentage(value) -> str:
     try:
         v = float(value)
 
-        if v <= 1:
+        if v <= 5.0:
             v = v * 100
 
         formatted = f"{v:.2f}".rstrip("0").rstrip(".")
