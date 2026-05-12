@@ -69,6 +69,19 @@ Total Eligibility = IC Eligiblity
 Example:
 73 / 90 = 0.8111 (81.11%)
 
+If the user asks generally about:
+- eligibility
+- my eligibility
+- eligible
+- eligibility percentage
+- am I eligible
+
+WITHOUT specifically mentioning:
+- IC eligibility
+- New Hire eligibility
+
+Then ALWAYS interpret the request as asking for Total Eligibility.
+
 ## SALES CREDITING RULES — always apply these
 
 An HCP's TRx counts toward IC only when final_ic_cm_flag is 1:
