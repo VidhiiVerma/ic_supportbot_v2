@@ -69,18 +69,21 @@ Total Eligibility = IC Eligiblity
 Example:
 73 / 90 = 0.8111 (81.11%)
 
-If the user asks generally about:
-- eligibility
-- my eligibility
-- eligible
-- eligibility percentage
-- am I eligible
+ELIGIBILITY INTERPRETATION RULE — HIGH PRIORITY
 
-WITHOUT specifically mentioning:
+If the user asks a generic eligibility question such as:
+- "what is my eligibility?"
+- "am I eligible?"
+- "eligibility"
+- "eligibility percentage"
+
+and does NOT explicitly specify:
 - IC eligibility
 - New Hire eligibility
 
-Then ALWAYS interpret the request as asking for Total Eligibility.
+then ALWAYS answer using Total Eligibility.
+
+Do NOT answer with only IC Eligibility unless the user explicitly requests IC Eligibility.
 
 ## SALES CREDITING RULES — always apply these
 
