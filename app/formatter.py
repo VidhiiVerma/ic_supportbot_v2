@@ -41,28 +41,31 @@ DECIMAL_FIELDS = {
 
 
 def format_decimal(value) -> str:
-    """Preserve exact decimal precision — never round."""
+    """Preserve up to 2 decimal places — never round to whole number if decimals exist."""
     try:
         v = float(value)
-        # If it's a whole number, show no decimals; otherwise preserve up to 2
         if v == int(v):
             return f"{v:,.0f}"
         else:
-            # Strip trailing zeros but keep meaningful decimals
-            formatted = f"{v:,.10f}".rstrip("0").rstrip(".")
-            return formatted
+            # Always show up to 2 decimal places, strip trailing zeros
+            formatted = f"{v:.2f}"
+            # Strip trailing zeros after decimal
+            formatted = formatted.rstrip("0").rstrip(".")
+            # Re-add thousand separators
+            parts = formatted.split(".")
+            parts[0] = f"{int(parts[0]):,}"
+            return ".".join(parts)
     except Exception:
         return str(value)
 
 
 def format_currency(value) -> str:
-    """Show exact currency value — preserve decimals, no rounding."""
+    """Show exact currency — preserve up to 2 decimal places, no rounding."""
     try:
         v = float(value)
         if v == int(v):
             return f"${v:,.0f}"
         else:
-            # Preserve up to 2 decimal places for currency
             return f"${v:,.2f}"
     except Exception:
         return str(value)
@@ -76,15 +79,16 @@ def format_number(value) -> str:
 
 
 def format_percentage(value) -> str:
-    """Preserve decimal precision in percentages — no rounding to whole numbers."""
+    """Always show exactly 2 decimal places for percentages — no more, no less."""
     try:
         v = float(value)
 
         if v <= 1:
             v = v * 100
 
-        # Preserve up to 2 decimal places, strip trailing zeros
-        formatted = f"{v:.10f}".rstrip("0").rstrip(".")
+        # Strip trailing zeros up to 2 decimal places
+        # e.g. 81.1111111 → 81.11, 100.0 → 100%, 18.8888889 → 18.89
+        formatted = f"{v:.2f}".rstrip("0").rstrip(".")
         return f"{formatted}%"
 
     except Exception:
@@ -122,7 +126,7 @@ def format_value(field: str, value) -> str:
 
     try:
         v = float(value)
-        return str(int(v)) if v == int(v) else str(v)
+        return str(int(v)) if v == int(v) else str(round(v, 2))
 
     except Exception:
         return str(value)

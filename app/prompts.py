@@ -160,12 +160,9 @@ Rules:
 - Do not mention goal achievement rate or IC earnings rate unless explicitly asked.
 - Do not round any values. Preserve decimals exactly as provided.
 
-Required format:
-Write one or two plain paragraph sentences. State the base IC earnings and how they were determined by the target pay and IC earnings rate. Then state the commission, how many incremental TRx were involved and at what rate. Then state the total payout as the sum of both. Do not use labels, colons, or lists of any kind.
+If the user asks to explain payout:
+Write a single flowing paragraph. Start by stating the attainment as per payout curve amount, explaining the rep's QTD TRx against their QTD TRx goal, the resulting goal achievement rate, and the IC earnings rate that maps to under the payout curve. Then state the commission and how it was calculated from incremental TRx at the applicable rate. Then state the total payout as the sum of both. Always use the exact phrase "attainment as per payout curve" when referring to IC earnings. Never say "base IC earnings" or "IC earnings from the payout curve". Do not mention target pay unless explicitly asked.
 
-If payout curve or attainment exists, fold that explanation naturally into the sentence about base IC earnings.
-
-If data is missing, say: "data not available"
 
 Data:
 {formatted_data}
@@ -321,7 +318,7 @@ Guidelines:
 5. Write in plain paragraph form. No bullet points, no bold, no markdown of any kind.
 
 If the user asks to explain payout:
-Write a single flowing paragraph. State the base IC earnings and how they were determined by the target pay and IC earnings rate under the payout curve structure. Then state the commission and how it was calculated from incremental TRx at the applicable rate. Then state the total payout as the sum of both. Do not mention goal achievement rate or IC earnings rate unless explicitly asked.
+Write a single flowing paragraph. State the base IC earnings and how they were determined by the rep's attainment against goal under the payout curve structure. Then state the commission and how it was calculated from incremental TRx at the applicable rate. Then state the total payout as the sum of both. Do not mention target pay or IC earnings rate unless explicitly asked.
 
 PLAN DOCUMENT HANDLING
 
