@@ -33,6 +33,17 @@ INTEGER_FIELDS = {
     "total_projected_incremental_trx",
 }
 
+DECIMAL_FIELDS = {
+    "credits",
+    "credited_trx",
+}
+
+def format_decimal(value) -> str:
+    try:
+        v = float(value)
+        return f"{v:,.1f}" if not v.is_integer() else f"{v:,.0f}"
+    except Exception:
+        return str(value)
 
 def format_currency(value) -> str:
     try:
@@ -86,6 +97,8 @@ def format_value(field: str, value) -> str:
         return format_percentage(value)
     if f in RATE_FIELDS:
         return format_rate(value)
+    if f in DECIMAL_FIELDS:
+        return format_decimal(value)
     if f in INTEGER_FIELDS:
         return format_number(value)
 
