@@ -41,17 +41,16 @@ def build_hcp_totals(rows):
         # We still check dermacline_trx for inclusion logic, but we don't display it
         raw_trx = float(row.get("dermacline_trx", 0))
 
-        if credit <= 0 and raw_trx <= 0:
-            continue
-
         hcp_name = str(row.get("hcp_name", "Unknown HCP")).strip()
         reason = str(row.get("reason", "")).strip()
+        pct = float(row.get("assignment_pct", 0))
 
         if hcp_name not in hcp_totals:
             hcp_totals[hcp_name] = {
                 "credit": 0, 
                 "raw_trx": 0, 
-                "reasons": set()
+                "reasons": set(),
+                "assignment_pct": pct
             }
 
         hcp_totals[hcp_name]["credit"] += credit
@@ -84,14 +83,13 @@ def get_hcp_credit_breakdown(rows, question):
         sorted(totals.items()),
         start=1
     ):
-        reason_part = ""
-        if stats["reasons"]:
-            reasons = sorted(list(stats["reasons"]))
-            reason_part = f" (Reason: {', '.join(reasons)})"
-
-        # Note: raw TRx is intentionally omitted to follow prompt instructions
+        reasons = sorted(list(stats["reasons"])) if stats["reasons"] else ["None"]
+        reason_str = ", ".join(reasons)
+        pct_val = stats["assignment_pct"]
+        
+        # Structure with clear labels for LLM parsing
         lines.append(
-            f"{idx}. {name}: {format_decimal(stats['credit'])} TRx sales credits{reason_part}"
+            f"{idx}. {name}: {format_decimal(stats['credit'])} TRx sales credits | Assignment: {pct_val*100:.0f}% | Reason: {reason_str}"
         )
 
     return "\n".join(lines)

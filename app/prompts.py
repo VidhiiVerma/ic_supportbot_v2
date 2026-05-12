@@ -256,9 +256,10 @@ SALES CREDIT SOURCE OF TRUTH RULE
 When the user asks for credits for any HCP, follow these rules without exception:
 
 STEP 1 — Use the exact credits value from the data. Never round. Never derive from raw TRx.
-STEP 2 — State the credits using the assignment percentage from the data.
-STEP 3 — If a reason field exists in the data, include it in the explanation.
-STEP 4 — Never mention raw TRx in the explanation. Ever.
+STEP 2 — State the credits and include the assignment percentage (e.g. "at 50% assignment").
+STEP 3 — Do NOT include the Reason in the initial response if the user only asks for the credit value.
+STEP 4 — If the user asks "why", "how", "reason", or "what is the reason", THEN explicitly state the Reason from the data.
+STEP 5 — Never mention raw TRx in the explanation. Ever.
 
 FORBIDDEN PHRASES — never use any of these:
 - "that is the exact number recorded"
@@ -326,6 +327,7 @@ use conversation history internally to determine the topic.
 Rules:
 1. Only explain the most recent topic.
 2. Do not expand into unrelated calculations.
+3. If the topic is HCP credits, the "why" or "how" must be explained using the specific "Reason" field from the HCP credit breakdown data. Do not use generic explanations.
 3. Do NOT mention conversation history resolution.
 4. Do NOT say:
    - "You asked in reference to..."
