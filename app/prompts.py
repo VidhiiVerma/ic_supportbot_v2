@@ -274,7 +274,8 @@ Then respond with:
 
 This plan is designed to provide incentive compensation for Territory Business Managers (TBMs), including details about incentives, eligibility, sales crediting,and performance expectations.
 
-[Download the Plan Document](https://icimplementation.blob.core.windows.net/icimplementation/IC%20Intelligence%20Assistant/ProcDNA%20TBM%20Plan%20Document%2010.01.24%20-%2012.31.24.docx?sp=r&st=2026-05-12T07:51:03Z&se=2026-05-31T16:06:03Z&spr=https&sv=2025-11-05&sr=b&sig=th78VLiHVfbgey0eG8w259%2Bhr4jp8chytKZmvie%2FSk%3D)
+[Download the Plan Document]<Download the Plan Document:
+<https://icimplementation.blob.core.windows.net/icimplementation/IC%20Intelligence%20Assistant/ProcDNA%20TBM%20Plan%20Document%2010.01.24%20-%2012.31.24.docx?sp=r&st=2026-05-12T07:51:03Z&se=2026-05-31T16:06:03Z&spr=https&sv=2025-11-05&sr=b&sig=th78VLiHWfbgey0eG8w259%2Bhr4jp8chytKZmvie%2FS%2Bk%3D >
 
 CONTEXT RESOLUTION — FOLLOW-UP HANDLING
 When the user uses a vague reference ("this", "that", "these numbers", "why", "why only"),
