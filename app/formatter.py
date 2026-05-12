@@ -41,16 +41,29 @@ DECIMAL_FIELDS = {
 
 
 def format_decimal(value) -> str:
+    """Preserve exact decimal precision — never round."""
     try:
         v = float(value)
-        return f"{v:,.1f}" if not v.is_integer() else f"{v:,.0f}"
+        # If it's a whole number, show no decimals; otherwise preserve up to 2
+        if v == int(v):
+            return f"{v:,.0f}"
+        else:
+            # Strip trailing zeros but keep meaningful decimals
+            formatted = f"{v:,.10f}".rstrip("0").rstrip(".")
+            return formatted
     except Exception:
         return str(value)
 
 
 def format_currency(value) -> str:
+    """Show exact currency value — preserve decimals, no rounding."""
     try:
-        return f"${float(value):,.0f}"
+        v = float(value)
+        if v == int(v):
+            return f"${v:,.0f}"
+        else:
+            # Preserve up to 2 decimal places for currency
+            return f"${v:,.2f}"
     except Exception:
         return str(value)
 
@@ -63,13 +76,16 @@ def format_number(value) -> str:
 
 
 def format_percentage(value) -> str:
+    """Preserve decimal precision in percentages — no rounding to whole numbers."""
     try:
         v = float(value)
 
         if v <= 1:
             v = v * 100
 
-        return f"{v:.0f}%"
+        # Preserve up to 2 decimal places, strip trailing zeros
+        formatted = f"{v:.10f}".rstrip("0").rstrip(".")
+        return f"{formatted}%"
 
     except Exception:
         return str(value)
