@@ -39,28 +39,24 @@ DECIMAL_FIELDS = {
     "credited_trx",
 }
 
-
 def format_decimal(value) -> str:
-    """Preserve up to 2 decimal places — never round to whole number if decimals exist."""
     try:
-        v = float(value)
-        if v == int(v):
-            return f"{v:,.0f}"
+        s = str(value).strip()
+        v = float(s)
+        if "." in s:
+            decimal_part = s.split(".")[1].rstrip("0")
+            if decimal_part:
+                whole = f"{int(v):,}"
+                return f"{whole}.{decimal_part}"
+            else:
+                return f"{int(v):,}"
         else:
-            # Always show up to 2 decimal places, strip trailing zeros
-            formatted = f"{v:.2f}"
-            # Strip trailing zeros after decimal
-            formatted = formatted.rstrip("0").rstrip(".")
-            # Re-add thousand separators
-            parts = formatted.split(".")
-            parts[0] = f"{int(parts[0]):,}"
-            return ".".join(parts)
+            return f"{int(v):,}"
     except Exception:
         return str(value)
 
 
 def format_currency(value) -> str:
-    """Show exact currency — preserve up to 2 decimal places, no rounding."""
     try:
         v = float(value)
         if v == int(v):
@@ -79,15 +75,12 @@ def format_number(value) -> str:
 
 
 def format_percentage(value) -> str:
-    """Always show exactly 2 decimal places for percentages — no more, no less."""
     try:
         v = float(value)
 
         if v <= 1:
             v = v * 100
 
-        # Strip trailing zeros up to 2 decimal places
-        # e.g. 81.1111111 → 81.11, 100.0 → 100%, 18.8888889 → 18.89
         formatted = f"{v:.2f}".rstrip("0").rstrip(".")
         return f"{formatted}%"
 

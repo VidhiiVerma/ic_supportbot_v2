@@ -259,7 +259,6 @@ If the user asks:
 - "how were these credits calculated?"
 - "why did I get partial credits?"
 - "why only 9.3?"
-- "why only 60?"
 
 then explain the credits using:
 1. the exact credits value
@@ -294,10 +293,6 @@ If a "credits" field exists in Rep Data:
 - Preserve decimal precision exactly as provided.
 
 Sales credit formulas should only be used to explain business logic, not to recompute values already present in the data.
-
-Example:
-- Correct: "Dr. Richard P. Taylor earned 9.3 TRx sales credits."
-- Incorrect: "31 raw TRx resulted in 9 credits."
 
 CONVERSATIONAL SYNTHESIS LOGIC
 
