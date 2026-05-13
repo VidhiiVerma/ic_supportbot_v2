@@ -11,13 +11,12 @@ from app.services.hcp import (
     count_unique_hcps,
 )
 
-from app.formatter import format_calc_for_llm
+from app.formatter import format_calc_for_llm, format_dict_for_llm
 
 from app.conversation_memory import (
-    format_history_for_prompt,
-    save_turn,
+    get_formatted_history,
+    save_turn,               
 )
-
 
 
 # Follow-up signals that indicate the user is asking about a previous response
@@ -28,15 +27,15 @@ _FOLLOWUP_SIGNALS = {
 }
 
 
-def _build_rag_query(question: str, memory: dict) -> str:
+def _build_rag_query(question: str, user_id: str) -> str:
     """
     For follow-up questions, enrich the RAG query with the last assistant
-    response so the vector retrieval finds the right policy section.
+    response so vector retrieval finds the right policy section.
 
     Example:
-        question = "why commission rate is 10 only"
+        question     = "why commission rate is 10 only"
         last_response = "Commission: 49 TRx x $10/TRx = $490"
-        rag_query = "why commission rate is 10 only\nContext: Commission: 49 TRx x $10/TRx = $490"
+        rag_query    = "why commission rate is 10 only\nContext: Commission: ..."
     """
     q_lower = question.lower()
     is_followup = any(signal in q_lower for signal in _FOLLOWUP_SIGNALS)
@@ -44,91 +43,90 @@ def _build_rag_query(question: str, memory: dict) -> str:
     if not is_followup:
         return question
 
-    history = (memory or {}).get("history", [])
-    # Find the most recent assistant turn
+    # Pull last assistant line from formatted history
+    history_str = get_formatted_history(user_id)
+    lines = history_str.splitlines()
+
     last_assistant = next(
-        (t["content"] for t in reversed(history) if t["role"] == "assistant"),
+        (ln[len("Assistant: "):] for ln in reversed(lines)
+         if ln.startswith("Assistant: ")),
         None,
     )
 
     if last_assistant:
-        # Append last response as context to improve RAG retrieval accuracy
         return f"{question}\nContext: {last_assistant}"
 
     return question
 
 
 def get_rep_explanation(
-
-    rep_id,
-    question,
+    rep_id: str,
+    question: str,
     rag,
     llm,
-    memory=None,
+    user_id: str,          
 ):
-    # ---------------- FETCH DATA ---------------- #
 
     rep_data = get_rep_data(rep_id)
 
     if not rep_data:
         return "No data found for this rep."
 
-    payout = rep_data.get("payout", {})
+    payout      = rep_data.get("payout", {})
     eligibility = rep_data.get("eligibility", {})
-    sales_rows = rep_data.get("sales", [])
+    sales_rows  = rep_data.get("sales", [])
 
     rows = [
         r for r in sales_rows
         if str(r.get("assignment_emp")) == str(rep_id)
     ]
 
-    # ---------------- DETERMINISTIC CALCULATIONS ---------------- #
-
-    calc = calculate_ic(rep_data)
-
-    formatted_calc = (
-        format_calc_for_llm(calc)
-        if calc
-        else "data not available"
+    rep_name = (
+        payout.get("rep_name")
+        or eligibility.get("rep_name")
+        or rep_data.get("rep_name")
+        or "Rep"                       
+    )
+    rep_role = (
+        payout.get("role")
+        or eligibility.get("role")
+        or rep_data.get("role")
+        or "TBM"
     )
 
-    # ---------------- HCP / CREDIT DATA ---------------- #
+    # DETERMINISTIC CALCULATION
 
-    total_hcps   = count_unique_hcps(rows)
+    calc           = calculate_ic(rep_data)
+    formatted_calc = format_calc_for_llm(calc) if calc else "data not available"
+
+    # HCP / CREDIT DATA 
+
+    total_hcps    = count_unique_hcps(rows)
     total_credits = get_total_credits(rows, question)
     hcp_breakdown = get_hcp_credit_breakdown(rows, question)
     hcp_names     = get_hcp_names(rows)
 
-    # ---------------- POLICY CONTEXT (context-aware RAG query) ---------------- #
+    # POLICY CONTEXT (context-aware RAG query) 
 
-    rag_query = _build_rag_query(question, memory)
+    rag_query      = _build_rag_query(question, user_id)   # uses user_id now
     policy_context = rag.get_context(rag_query) if rag else ""
 
+    # METADATA 
 
-    # ---------------- METADATA EXTRACTION ---------------- #
-
-    # Try to find Product and Period in payout or eligibility data
     product = payout.get("product_name") or eligibility.get("product") or "Dermacline"
-    period  = payout.get("period") or eligibility.get("period") or "this quarter"
+    period  = payout.get("period")       or eligibility.get("period")  or "this quarter"
 
-    # ---------------- CONVERSATION HISTORY ---------------- #
+    #  CONVERSATION HISTORY
 
-    conversation_history = (
-        format_history_for_prompt(memory)
-        if memory
-        else "No prior conversation."
-    )
+    conversation_history = get_formatted_history(user_id)  
 
-    # ---------------- BUILD PROMPT ---------------- #
-
-    from app.formatter import format_dict_for_llm
-    
     prompt = ORCHESTRATION_PROMPT.format(
+        rep_name=rep_name,             
+        rep_role=rep_role,            
         conversation_history=conversation_history,
-
         rep_data=f"""
 PRODUCT: {product}
-PERIOD: {period}
+PERIOD:  {period}
 
 PAYOUT DATA:
 {format_dict_for_llm(payout)}
@@ -139,9 +137,8 @@ ELIGIBILITY DATA:
 CALCULATED VALUES:
 {formatted_calc}
 
-HCP COUNT: {total_hcps}
-
-TOTAL CREDITS: {total_credits}
+HCP COUNT:         {total_hcps}
+TOTAL CREDITS:     {total_credits}
 
 HCP CREDIT BREAKDOWN:
 {hcp_breakdown}
@@ -153,30 +150,24 @@ HCP NAMES:
         question=question,
     )
 
-    # ---------------- GENERATE RESPONSE ---------------- #
-
     response = llm.generate(prompt)
 
-    # ---------------- SAVE TO STRUCTURED MEMORY ---------------- #
+    data_snapshot = dict(calc) if calc else {}
+    if payout:
+        data_snapshot.update({
+            k: payout[k]
+            for k in (
+                "qtd_trx", "qtd_trx_goal", "target_pay",
+                "ic_earning_rate", "ic_earnings_rate",
+            )
+            if k in payout
+        })
 
-    if memory is not None:
-        # Build a clean snapshot of this turn's numbers for follow-up resolution
-        data_snapshot = calc if calc else {}
-        if payout:
-            data_snapshot.update({
-                k: payout[k]
-                for k in (
-                    "qtd_trx", "qtd_trx_goal", "target_pay",
-                    "ic_earning_rate", "ic_earnings_rate",
-                )
-                if k in payout
-            })
-
-        save_turn(
-            memory=memory,
-            question=question,
-            response=response,
-            data_snapshot=data_snapshot,
-        )
+    save_turn(                       
+        user_id=user_id,
+        question=question,
+        response=response,
+        data_snapshot=data_snapshot,
+    )
 
     return response
