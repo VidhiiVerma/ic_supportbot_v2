@@ -21,7 +21,7 @@ from typing import Optional
 # Per-user conversation state, keyed by Teams user_id
 conversation_memory: dict = {}
 
-MAX_HISTORY_TURNS = 5   # keep last 5 user+assistant pairs = 10 entries
+MAX_HISTORY_TURNS = 2   # keep last 2 user+assistant pairs = 4 entries
 
 
 def get_history(memory: dict) -> list[dict]:
