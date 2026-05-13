@@ -50,6 +50,7 @@ def _build_rag_query(question: str, user_id: str) -> str:
 
     # Pull last assistant line from formatted history
     history_str = get_formatted_history(user_id)
+    logger.info(f"Context Build: Found history for {user_id}:\n{history_str}")
     lines = history_str.splitlines()
 
     last_assistant = next(
@@ -134,6 +135,7 @@ def get_rep_explanation(
     #  CONVERSATION HISTORY
 
     conversation_history = get_formatted_history(user_id)  
+    logger.info(f"Final Prompt: History for {user_id} has {len(conversation_history)} chars")
 
     prompt = ORCHESTRATION_PROMPT.format(
         rep_name=final_rep_name,             

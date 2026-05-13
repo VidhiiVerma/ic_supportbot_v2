@@ -1,9 +1,35 @@
-
+import os
+import json
+import logging
 from typing import Optional
 
 
+logger = logging.getLogger(__name__)
+
+# File-based persistence to share memory across workers
+MEMORY_FILE = "conversation_memory.json"
+
 # Per-user conversation state, keyed by Teams user_id
 conversation_memory: dict = {}
+
+def _load_memory():
+    global conversation_memory
+    if os.path.exists(MEMORY_FILE):
+        try:
+            with open(MEMORY_FILE, "r") as f:
+                conversation_memory = json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load memory: {e}")
+
+def _save_memory():
+    try:
+        with open(MEMORY_FILE, "w") as f:
+            json.dump(conversation_memory, f)
+    except Exception as e:
+        logger.error(f"Failed to save memory: {e}")
+
+# Initial load
+_load_memory()
 
 MAX_HISTORY_TURNS = 2   # keep last 2 user+assistant pairs = 4 entries
 
@@ -17,8 +43,11 @@ def get_formatted_history(user_id: str) -> str:
     Render structured turns into a clean string for the ORCHESTRATION_PROMPT.
     Includes data_snapshot values inline so the LLM can reference them.
     """
+    _load_memory()  # Refresh from disk for multi-worker support
     memory = conversation_memory.get(user_id, {})
     history = get_history(memory)
+    
+    logger.info(f"Formatting history for user {user_id}: {len(history)} turns found")
     if not history:
         return "No prior conversation."
 
@@ -48,6 +77,8 @@ def save_turn(
     Save one user+assistant turn to memory.
     data_snapshot should contain the calculated IC values for this response.
     """
+    _load_memory()  # Refresh before update
+    
     if user_id not in conversation_memory:
         conversation_memory[user_id] = {"history": []}
     
@@ -64,3 +95,6 @@ def save_turn(
     # Trim to last MAX_HISTORY_TURNS pairs
     max_entries = MAX_HISTORY_TURNS * 2
     memory["history"] = memory["history"][-max_entries:]
+    
+    _save_memory()  # Persist change
+    logger.info(f"Saved turn for user {user_id}. History now has {len(memory['history'])} entries.")
