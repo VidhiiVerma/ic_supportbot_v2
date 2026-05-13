@@ -15,7 +15,7 @@ from botbuilder.core import (
     BotFrameworkAdapterSettings,
     TurnContext,
 )
-from botbuilder.schema import Activity
+from botbuilder.schema import Activity, ActivityTypes, TextFormatTypes
 from botframework.connector.auth import MicrosoftAppCredentials
 
 import msal
@@ -100,8 +100,14 @@ class AskResponse(BaseModel):
 # HELPERS
 
 def _strip_html(text: str) -> str:
-    """Strip HTML tags that Teams injects into rich-text messages."""
-    return re.sub(r'<[^>]+>', '', text or '').strip()
+    """Strip HTML tags and decode common entities that Teams injects."""
+    if not text:
+        return ""
+    # Remove HTML tags
+    clean_text = re.sub(r'<[^>]+>', '', text)
+    # Decode common entities
+    clean_text = clean_text.replace('&nbsp;', ' ').replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
+    return clean_text.strip()
 
 #  TEAMS HANDLER 
 
@@ -137,7 +143,14 @@ async def handle_teams_message(turn_context: TurnContext):
 
         logger.info(f"Bot Reply : {reply}")
 
-        await turn_context.send_activity(reply[:2000])
+        # Explicitly send as plain text to avoid <div> injection in Teams UI
+        await turn_context.send_activity(
+            Activity(
+                type=ActivityTypes.message,
+                text=reply,
+                text_format=TextFormatTypes.plain
+            )
+        )
 
         logger.info("Response sent successfully")
 
