@@ -138,6 +138,7 @@ def get_rep_explanation(
     logger.info(f"Final Prompt: History for {user_id} has {len(conversation_history)} chars")
 
     prompt = ORCHESTRATION_PROMPT.format(
+        rep_id=rep_id,
         rep_name=final_rep_name,             
         rep_role=rep_role,            
         conversation_history=conversation_history,
