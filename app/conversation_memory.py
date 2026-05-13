@@ -1,19 +1,3 @@
-"""
-Conversation memory for the IC chatbot.
-
-Each user gets a dict keyed by user_id:
-{
-    "history": [
-        {"role": "user",      "content": "what my payout"},
-        {"role": "assistant", "content": "Your total IC payout is $10,490.",
-                              "data_snapshot": {"total_ic": 10490, "ic_earnings": 10000, ...}},
-        ...
-    ]
-}
-
-The data_snapshot on assistant turns lets the LLM explain "these numbers"
-on follow-ups using the exact grounded values — not its own narrative.
-"""
 
 from typing import Optional
 
@@ -25,7 +9,6 @@ MAX_HISTORY_TURNS = 2   # keep last 2 user+assistant pairs = 4 entries
 
 
 def get_history(memory: dict) -> list[dict]:
-    """Return structured turn history for a user."""
     return memory.get("history", [])
 
 
