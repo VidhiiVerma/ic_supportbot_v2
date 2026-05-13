@@ -12,11 +12,12 @@ def get_history(memory: dict) -> list[dict]:
     return memory.get("history", [])
 
 
-def format_history_for_prompt(memory: dict) -> str:
+def get_formatted_history(user_id: str) -> str:
     """
     Render structured turns into a clean string for the ORCHESTRATION_PROMPT.
     Includes data_snapshot values inline so the LLM can reference them.
     """
+    memory = conversation_memory.get(user_id, {})
     history = get_history(memory)
     if not history:
         return "No prior conversation."
@@ -38,7 +39,7 @@ def format_history_for_prompt(memory: dict) -> str:
 
 
 def save_turn(
-    memory: dict,
+    user_id: str,
     question: str,
     response: str,
     data_snapshot: Optional[dict] = None,
@@ -47,8 +48,10 @@ def save_turn(
     Save one user+assistant turn to memory.
     data_snapshot should contain the calculated IC values for this response.
     """
-    if "history" not in memory:
-        memory["history"] = []
+    if user_id not in conversation_memory:
+        conversation_memory[user_id] = {"history": []}
+    
+    memory = conversation_memory[user_id]
 
     memory["history"].append({"role": "user", "content": question})
 

@@ -1,3 +1,4 @@
+from typing import Optional
 from app.db import get_rep_data
 
 from app.prompts import ORCHESTRATION_PROMPT
@@ -64,7 +65,8 @@ def get_rep_explanation(
     question: str,
     rag,
     llm,
-    user_id: str,          
+    user_id: str,
+    rep_name: Optional[str] = None,
 ):
 
     rep_data = get_rep_data(rep_id)
@@ -81,8 +83,9 @@ def get_rep_explanation(
         if str(r.get("assignment_emp")) == str(rep_id)
     ]
 
-    rep_name = (
-        payout.get("rep_name")
+    final_rep_name = (
+        rep_name
+        or payout.get("rep_name")
         or eligibility.get("rep_name")
         or rep_data.get("rep_name")
         or "Rep"                       
@@ -121,7 +124,7 @@ def get_rep_explanation(
     conversation_history = get_formatted_history(user_id)  
 
     prompt = ORCHESTRATION_PROMPT.format(
-        rep_name=rep_name,             
+        rep_name=final_rep_name,             
         rep_role=rep_role,            
         conversation_history=conversation_history,
         rep_data=f"""
