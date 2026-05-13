@@ -63,6 +63,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/ping")
+async def ping():
+    return {"status": "ok", "message": "pong"}
+
 #  ADAPTER 
 
 adapter_settings = BotFrameworkAdapterSettings(
