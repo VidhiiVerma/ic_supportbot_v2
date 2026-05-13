@@ -260,7 +260,7 @@ STEP 1 — Use the exact credits value from the data. Never round. Never derive 
 STEP 2 — State only the credits value. Do not mention assignment percentage or raw TRx.
 STEP 3 — Do NOT include the Reason in the initial response if the user only asks for the credit value.
 STEP 4 — If the user asks "why", "how", "reason", "explain", or "what is the reason", THEN explicitly state the Reason from the data.
-STEP 5 — You MUST include the exact formula: dermacline_trx * final_ic_cm_flag * assignment_pct when explaining credits.
+STEP 5 — You MUST include the exact formula: dermacline trx * final ic closed market * assignment percentage when explaining credits.
 
 FORBIDDEN PHRASES — never use any of these:
 - "that is the exact number recorded"
