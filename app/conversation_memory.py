@@ -1,5 +1,6 @@
 import os
 import json
+import sys
 import logging
 from typing import Optional
 
@@ -7,7 +8,10 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # File-based persistence to share memory across workers
-MEMORY_FILE = "conversation_memory.json"
+if sys.platform == "win32":
+    MEMORY_FILE = "conversation_memory.json"
+else:
+    MEMORY_FILE = "/tmp/conversation_memory.json"
 
 # Per-user conversation state, keyed by Teams user_id
 conversation_memory: dict = {}
@@ -17,9 +21,16 @@ def _load_memory():
     if os.path.exists(MEMORY_FILE):
         try:
             with open(MEMORY_FILE, "r") as f:
-                conversation_memory = json.load(f)
+                content = f.read()
+                if content:
+                    conversation_memory = json.loads(content)
+                else:
+                    conversation_memory = {}
         except Exception as e:
-            logger.error(f"Failed to load memory: {e}")
+            logger.error(f"Failed to load memory from {MEMORY_FILE}: {e}")
+            conversation_memory = {}
+    else:
+        conversation_memory = {}
 
 def _save_memory():
     try:
