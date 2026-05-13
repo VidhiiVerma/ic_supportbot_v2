@@ -1,3 +1,5 @@
+import time
+import logging
 from typing import Optional
 from app.db import get_rep_data
 
@@ -19,6 +21,8 @@ from app.conversation_memory import (
     save_turn,               
 )
 
+
+logger = logging.getLogger(__name__)
 
 # Follow-up signals that indicate the user is asking about a previous response
 _FOLLOWUP_SIGNALS = {
@@ -69,7 +73,10 @@ def get_rep_explanation(
     rep_name: Optional[str] = None,
 ):
 
+    start_db = time.time()
     rep_data = get_rep_data(rep_id)
+    db_time = time.time() - start_db
+    logger.info(f"DB Fetch for {rep_id} took {db_time:.2f}s")
 
     if not rep_data:
         return "No data found for this rep."
@@ -83,11 +90,12 @@ def get_rep_explanation(
         if str(r.get("assignment_emp")) == str(rep_id)
     ]
 
+    # PRIORITIZE DB name (Alex Morgan) over passed name (Vidhi Verma)
     final_rep_name = (
-        rep_name
-        or payout.get("rep_name")
+        payout.get("rep_name")
         or eligibility.get("rep_name")
         or rep_data.get("rep_name")
+        or rep_name  # fallback to name from Teams/API
         or "Rep"                       
     )
     rep_role = (
@@ -112,7 +120,11 @@ def get_rep_explanation(
     # POLICY CONTEXT (context-aware RAG query) 
 
     rag_query      = _build_rag_query(question, user_id)   # uses user_id now
+    
+    start_rag = time.time()
     policy_context = rag.get_context(rag_query) if rag else ""
+    rag_time = time.time() - start_rag
+    logger.info(f"RAG Retrieval took {rag_time:.2f}s")
 
     # METADATA 
 
@@ -153,7 +165,10 @@ HCP NAMES:
         question=question,
     )
 
+    start_llm = time.time()
     response = llm.generate(prompt)
+    llm_time = time.time() - start_llm
+    logger.info(f"LLM Generation took {llm_time:.2f}s")
 
     data_snapshot = dict(calc) if calc else {}
     if payout:

@@ -108,36 +108,36 @@ def get_rep_data(rep_id: str):
 
         with get_connection() as conn:
             with conn.cursor() as cursor:
-                # 1. PAYOUT 
-                payout_query = """
-                SELECT *
-                FROM ic_implementation.ic_intelligence.payout_summary
-                WHERE `Rep ID` = ?
+                # 1. PAYOUT + ELIGIBILITY (JOINED)
+                # We use a LEFT JOIN on rep_name to get both summary and eligibility in one go.
+                joined_query = """
+                SELECT p.*, 
+                       e.total_eligibility, 
+                       e.eligibility_reason, 
+                       e.ic_eligibility as ic_eligibility_e, 
+                       e.new_hire_eligibility as new_hire_eligibility_e
+                FROM ic_implementation.ic_intelligence.payout_summary p
+                LEFT JOIN ic_implementation.ic_intelligence.eligibility_2 e 
+                  ON LOWER(TRIM(p.`Rep Name`)) = LOWER(TRIM(e.rep_name))
+                WHERE p.`Rep ID` = ?
                 """
-                cursor.execute(payout_query, (rep_id,))
-                payout_df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
+                cursor.execute(joined_query, (rep_id,))
+                df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
 
-                if payout_df.empty:
+                if df.empty:
                     return None
 
-                payout = payout_df.iloc[0].to_dict()
-                rep_name = payout.get("rep_name")
+                payout = df.iloc[0].to_dict()
+                
+                # Extract eligibility specific fields if they exist
+                eligibility = {
+                    "total_eligibility": payout.get("total_eligibility"),
+                    "eligibility_reason": payout.get("eligibility_reason"),
+                    "ic_eligibility": payout.get("ic_eligibility_e") or payout.get("ic_eligibility"),
+                    "new_hire_eligibility": payout.get("new_hire_eligibility_e") or payout.get("new_hire_eligibility")
+                }
 
-                # 2. ELIGIBILITY 
-                eligibility = {}
-                if rep_name:
-                    eligibility_query = """
-                    SELECT *
-                    FROM ic_implementation.ic_intelligence.eligibility_2
-                    WHERE LOWER(TRIM(rep_name)) = LOWER(TRIM(?))
-                    """
-                    cursor.execute(eligibility_query, (rep_name,))
-                    eligibility_df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
-                    
-                    if not eligibility_df.empty:
-                        eligibility = eligibility_df.iloc[0].to_dict()
-
-                # 3. SALES CREDITING 
+                # 2. SALES CREDITING 
                 sales_query = """
                 SELECT *
                 FROM ic_implementation.ic_intelligence.sales_crediting
