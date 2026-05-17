@@ -108,34 +108,31 @@ def get_rep_data(rep_id: str):
 
         with get_connection() as conn:
             with conn.cursor() as cursor:
-                # 1. PAYOUT + ELIGIBILITY (JOINED)
-                # We use a LEFT JOIN on rep_name to get both summary and eligibility in one go.
-                joined_query = """
-                SELECT p.*, 
-                       e.total_eligibility, 
-                       e.eligibility_reason, 
-                       e.ic_eligibility as ic_eligibility_e, 
-                       e.new_hire_eligibility as new_hire_eligibility_e
-                FROM ic_implementation.ic_intelligence.payout_summary p
-                LEFT JOIN ic_implementation.ic_intelligence.eligibility_2 e 
-                  ON LOWER(TRIM(p.`Rep Name`)) = LOWER(TRIM(e.rep_name))
-                WHERE p.`Rep ID` = ?
+                # 1. PAYOUT
+                payout_query = """
+                SELECT *
+                FROM ic_implementation.ic_intelligence.payout_summary
+                WHERE `Rep ID` = ?
                 """
-                cursor.execute(joined_query, (rep_id,))
-                df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
+                cursor.execute(payout_query, (rep_id,))
+                p_df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
 
-                if df.empty:
+                if p_df.empty:
                     return None
 
-                payout = df.iloc[0].to_dict()
+                payout = p_df.iloc[0].to_dict()
+                rep_name = payout.get("rep_name", "")
+
+                # 2. ELIGIBILITY (DYNAMIC)
+                elig_query = """
+                SELECT *
+                FROM ic_implementation.ic_intelligence.eligibility_2
+                WHERE LOWER(TRIM(rep_name)) = ?
+                """
+                cursor.execute(elig_query, (str(rep_name).lower().strip(),))
+                e_df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
                 
-                # Extract eligibility specific fields if they exist
-                eligibility = {
-                    "total_eligibility": payout.get("total_eligibility"),
-                    "eligibility_reason": payout.get("eligibility_reason"),
-                    "ic_eligibility": payout.get("ic_eligibility_e") or payout.get("ic_eligibility"),
-                    "new_hire_eligibility": payout.get("new_hire_eligibility_e") or payout.get("new_hire_eligibility")
-                }
+                eligibility = e_df.iloc[0].to_dict() if not e_df.empty else {}
 
                 # 2. SALES CREDITING 
                 sales_query = """
