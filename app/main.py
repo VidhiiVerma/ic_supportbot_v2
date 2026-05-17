@@ -4,6 +4,9 @@ load_dotenv()
 import os
 import re
 import logging
+import asyncio
+import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,9 +54,46 @@ def _fixed_get_access_token(self):
 
 MicrosoftAppCredentials.get_access_token = _fixed_get_access_token
 
-# APP 
+# APP STATE & LIFESPAN
 
-app = FastAPI(title="IC Compensation Chatbot")
+rag = None
+rag_status = "uninitialized"
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global rag, rag_status
+    rag_status = "initializing"
+    logger.info("Starting background RAG initialization...")
+    
+    def init_rag():
+        try:
+            from rag.pipeline import RAGSystem
+            r = RAGSystem()
+            r.load_or_build()
+            return r, "ready"
+        except Exception as e:
+            logger.warning(f"RAG disabled: {str(e)}")
+            return None, f"error: {str(e)}"
+
+    # Run the heavy RAG building in a background thread so it doesn't block startup
+    task = asyncio.create_task(asyncio.to_thread(init_rag))
+    
+    def _on_rag_done(t):
+        global rag, rag_status
+        try:
+            rag, rag_status = t.result()
+            logger.info(f"RAG background task completed. Status: {rag_status}")
+        except Exception as e:
+            rag_status = f"error: {str(e)}"
+            logger.error(f"RAG background task failed: {e}")
+            
+    task.add_done_callback(_on_rag_done)
+    
+    yield
+    # Cleanup if needed on shutdown
+
+
+app = FastAPI(title="IC Compensation Chatbot", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -62,6 +102,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    logger.info(f"Incoming Request: {request.method} {request.url.path}")
+    
+    try:
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        logger.info(f"Response: {response.status_code} | Time: {process_time:.4f}s")
+        return response
+    except Exception as e:
+        logger.error(f"Unhandled Exception in Request: {e}", exc_info=True)
+        raise
 
 @app.get("/ping")
 async def ping():
@@ -80,16 +134,7 @@ adapter = BotFrameworkAdapter(adapter_settings)
 
 llm = LLM()
 
-# RAG 
-
-rag = None
-try:
-    from rag.pipeline import RAGSystem
-    rag = RAGSystem()
-    rag.load_or_build()
-    logger.info(f"RAG ready: {rag.total_vectors} vectors")
-except Exception as e:
-    logger.warning(f"RAG disabled: {str(e)}")
+# RAG is now initialized asynchronously in the lifespan context manager
 
 # MODELS
 
@@ -169,13 +214,19 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "rag_status": rag_status}
 
 @app.post("/api/messages")
 async def messages(req: Request):
     try:
+        body_bytes  = await req.body()
+        logger.info(f"Raw Teams Payload: {body_bytes.decode('utf-8')}")
+        
         body        = await req.json()
         auth_header = req.headers.get("Authorization", "")
+        
+        logger.info(f"Auth Header Present: {bool(auth_header)}")
+        
         activity    = Activity().deserialize(body)
 
         response = await adapter.process_activity(
@@ -187,8 +238,8 @@ async def messages(req: Request):
         return response or Response(status_code=201)
 
     except Exception as e:
-        logger.error("Bot error", exc_info=True)
-        raise HTTPException(status_code=500, detail="Bot failed")
+        logger.error(f"Bot Framework Adapter Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Bot adapter failed to process activity")
 
 
 @app.post("/ask", response_model=AskResponse)
