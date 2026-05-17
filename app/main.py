@@ -152,10 +152,10 @@ def _strip_html(text: str) -> str:
     """Strip HTML tags and decode common entities that Teams injects."""
     if not text:
         return ""
-    # Remove HTML tags
-    clean_text = re.sub(r'<[^>]+>', '', text)
-    # Decode common entities
-    clean_text = clean_text.replace('&nbsp;', ' ').replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
+    # Decode common entities FIRST
+    clean_text = text.replace('&nbsp;', ' ').replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
+    # THEN Remove HTML tags
+    clean_text = re.sub(r'<[^>]+>', '', clean_text)
     return clean_text.strip()
 
 #  TEAMS HANDLER 
