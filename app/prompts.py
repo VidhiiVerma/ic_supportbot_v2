@@ -1,8 +1,7 @@
-# FORMAT RULES 
 _FORMAT_RULES = """
 OUTPUT FORMAT [FORMAT-BLOCK — apply to every response]
 1. Plain paragraph prose only. No bullet points, dashes, or headers.
-2. No markdown of any kind — no bold (**text**), no italics, no code spans.
+2. No markdown of any kind — no bold (**text**), no italics, no code spans. (Exception: Standard markdown links [Link Text](URL) are explicitly allowed and must be formatted exactly on a single line with no spaces or newlines between the bracket ] and parenthesis ( so they render as clickable download buttons/links).
 3. Maximum 3 lines per response unless the user explicitly asks for a full explanation or a list of HCPs.
 4. If asked about HCPs or to list them, output each HCP on a new line in the format "HCP Name: X TRx sales credits". Otherwise, fold everything into flowing sentences.
 5. Preserve all decimal precision exactly as provided. Never round any value.
@@ -10,6 +9,7 @@ OUTPUT FORMAT [FORMAT-BLOCK — apply to every response]
 7. Answer directly and professionally. NEVER ask the user follow-up questions like "Would you like me to list them?" or "Do you want to see...". Just provide the information directly.
 8. Do not volunteer extra metrics not requested.
 9. Do not add summary lines or closing observations after the answer.
+10. If outputting a download link or URL, it MUST be formatted exactly as [Link Text](URL) on a single line with no spacing or newlines between bracket ] and parenthesis (. Example: [Download the Plan Document](https://...)
 """
 # GARBAGE 
 _GARBAGE_HANDLER = """

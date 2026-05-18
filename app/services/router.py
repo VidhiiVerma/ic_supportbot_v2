@@ -86,6 +86,19 @@ def get_rep_explanation(
     eligibility = rep_data.get("eligibility", {})
     sales_rows  = rep_data.get("sales", [])
 
+    # Clean payout data to remove pre-calculated values that conflict with deterministic calculations
+    payout_clean = {
+        k: v for k, v in payout.items()
+        if k not in {
+            "total_projected_incremental_trx",
+            "commission_rate",
+            "commission_earnings_value",
+            "total__ic_earnings",
+            "total_ic_payout",
+            "ic_earnings_value"
+        }
+    }
+
     rows = [
         r for r in sales_rows
         if str(r.get("assignment_emp")) == str(rep_id)
@@ -147,7 +160,7 @@ PRODUCT: {product}
 PERIOD:  {period}
 
 PAYOUT DATA:
-{format_dict_for_llm(payout)}
+{format_dict_for_llm(payout_clean)}
 
 ELIGIBILITY DATA:
 {format_dict_for_llm(eligibility)}
