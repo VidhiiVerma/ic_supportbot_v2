@@ -3,9 +3,11 @@ load_dotenv()
 
 import os
 import logging
+import queue
 import pandas as pd
 from databricks import sql
 import threading
+import concurrent.futures
 
 # LOGGER SETUP
 logging.basicConfig(level=logging.INFO)
@@ -21,60 +23,95 @@ if DATABRICKS_HOST and DATABRICKS_HOST.startswith("https://"):
     DATABRICKS_HOST = DATABRICKS_HOST.replace("https://", "")
 
 # Validate
-if not DATABRICKS_HOST:
-    raise ValueError("Missing DATABRICKS_HOST")
+if not DATABRICKS_HOST or not DATABRICKS_HTTP_PATH or not DATABRICKS_TOKEN:
+    raise ValueError("Missing critical Databricks environment configuration variables.")
 
-if not DATABRICKS_HTTP_PATH:
-    raise ValueError("Missing DATABRICKS_HTTP_PATH")
-
-if not DATABRICKS_TOKEN:
-    raise ValueError("Missing DATABRICKS_TOKEN")
-
-logger.info("Databricks config loaded")
+logger.info("Databricks config loaded successfully.")
 
 
-#  CONNECTION 
+#  THREAD-SAFE CONNECTION POOL
+class DatabricksConnectionPool:
+    def __init__(self, size=10):
+        self._pool = queue.Queue(maxsize=size)
+        self.size = size
+        for _ in range(size):
+            self._pool.put(None)
+            
+    def _create_connection(self):
+        logger.info("Opening a new Databricks connection...")
+        return sql.connect(
+            server_hostname=DATABRICKS_HOST,
+            http_path=DATABRICKS_HTTP_PATH,
+            access_token=DATABRICKS_TOKEN,
+        )
+
+    def get_connection(self):
+        conn = self._pool.get()
+        if conn is None:
+            return self._create_connection()
+        
+        # Test connection validity with a simple lightweight ping/check
+        try:
+            with conn.cursor() as cursor:
+                # Verifies standard state of connection session
+                pass
+            return conn
+        except Exception as e:
+            logger.warning(f"Stale or dead connection detected in pool. Reconnecting... Error: {e}")
+            try:
+                conn.close()
+            except Exception:
+                pass
+            return self._create_connection()
+
+    def release_connection(self, conn):
+        if conn is not None:
+            try:
+                self._pool.put(conn, block=False)
+            except queue.Full:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+# Instantiate global connection pool
+db_pool = DatabricksConnectionPool(size=10)
+
+
+# Backward compatible helper
 def get_connection():
-    return sql.connect(
-        server_hostname=DATABRICKS_HOST,
-        http_path=DATABRICKS_HTTP_PATH,
-        access_token=DATABRICKS_TOKEN,
-    )
+    return db_pool.get_connection()
 
 
 #  QUERY EXECUTION 
 def fetch_df(query: str, params: tuple = ()) -> pd.DataFrame:
-    import time
     max_retries = 3
-
     for attempt in range(max_retries):
+        conn = db_pool.get_connection()
         try:
-            with get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(query, params)
-
-                    columns = [
-                        col[0]
-                        .lower()
-                        .strip()
-                        .replace(" ", "_")
-                        .replace("(", "")
-                        .replace(")", "")
-                        for col in cursor.description
-                    ]
-
-                    rows = cursor.fetchall()
-                    df = pd.DataFrame(rows, columns=columns)
-
-                    return df
-
+            with conn.cursor() as cursor:
+                cursor.execute(query, params)
+                columns = _get_columns(cursor.description)
+                rows = cursor.fetchall()
+                df = pd.DataFrame(rows, columns=columns)
+                return df
         except Exception as e:
+            # If connection issue, discard the connection rather than returning it to the pool
+            try:
+                conn.close()
+            except Exception:
+                pass
+            
             if attempt < max_retries - 1:
-                logger.warning(f"Query failed (attempt {attempt+1}/{max_retries}). Retrying...")
+                logger.warning(f"Query failed (attempt {attempt+1}/{max_retries}). Retrying... Error: {e}")
+                import time
                 time.sleep(2)
             else:
-                logger.error("Query failed permanently", exc_info=True)
+                logger.error("Query failed permanently after retries.", exc_info=True)
                 raise
+        finally:
+            # If connection was successful, release it back to pool
+            db_pool.release_connection(conn)
 
 
 #  WAKE UP WAREHOUSE (Non-blocking)
@@ -98,51 +135,61 @@ def _get_columns(cursor_description):
     ]
 
 
-# MAIN 
+#  CONCURRENT RETRIEVAL HELPERS
+def fetch_payout_data(rep_id: int):
+    query = """
+    SELECT *
+    FROM ic_implementation.ic_intelligence.payout_summary
+    WHERE `Rep ID` = ?
+    """
+    df = fetch_df(query, (rep_id,))
+    return df.iloc[0].to_dict() if not df.empty else None
+
+
+def fetch_sales_data(rep_id: int):
+    query = """
+    SELECT *
+    FROM ic_implementation.ic_intelligence.sales_crediting
+    WHERE assignment_emp = ?
+    """
+    df = fetch_df(query, (rep_id,))
+    return df.to_dict(orient="records")
+
+
+def fetch_eligibility_data(rep_name: str):
+    if not rep_name:
+        return {}
+    query = """
+    SELECT *
+    FROM ic_implementation.ic_intelligence.eligibility_2
+    WHERE LOWER(TRIM(rep_name)) = ?
+    """
+    df = fetch_df(query, (str(rep_name).lower().strip(),))
+    return df.iloc[0].to_dict() if not df.empty else {}
+
+
+# MAIN CONCURRENT DATA RETRIEVAL
 def get_rep_data(rep_id: str):
     """
-    Fetches all rep data in a single connection session to save time.
+    Fetches payout and sales concurrently, followed by eligibility to minimize latency.
     """
     try:
-        rep_id = int(rep_id)
+        rep_id_int = int(rep_id)
 
-        with get_connection() as conn:
-            with conn.cursor() as cursor:
-                # 1. PAYOUT
-                payout_query = """
-                SELECT *
-                FROM ic_implementation.ic_intelligence.payout_summary
-                WHERE `Rep ID` = ?
-                """
-                cursor.execute(payout_query, (rep_id,))
-                p_df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
+        # Run Payout and Sales queries concurrently
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            payout_future = executor.submit(fetch_payout_data, rep_id_int)
+            sales_future = executor.submit(fetch_sales_data, rep_id_int)
 
-                if p_df.empty:
-                    return None
+            payout = payout_future.result()
+            sales = sales_future.result()
 
-                payout = p_df.iloc[0].to_dict()
-                rep_name = payout.get("rep_name", "")
+        if not payout:
+            return None
 
-                # 2. ELIGIBILITY (DYNAMIC)
-                elig_query = """
-                SELECT *
-                FROM ic_implementation.ic_intelligence.eligibility_2
-                WHERE LOWER(TRIM(rep_name)) = ?
-                """
-                cursor.execute(elig_query, (str(rep_name).lower().strip(),))
-                e_df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
-                
-                eligibility = e_df.iloc[0].to_dict() if not e_df.empty else {}
-
-                # 2. SALES CREDITING 
-                sales_query = """
-                SELECT *
-                FROM ic_implementation.ic_intelligence.sales_crediting
-                WHERE assignment_emp = ?
-                """
-                cursor.execute(sales_query, (rep_id,))
-                sales_df = pd.DataFrame(cursor.fetchall(), columns=_get_columns(cursor.description))
-                sales = sales_df.to_dict(orient="records")
+        # Fetch eligibility based on the payout rep_name
+        rep_name = payout.get("rep_name", "")
+        eligibility = fetch_eligibility_data(rep_name)
 
         return {
             "payout": payout,

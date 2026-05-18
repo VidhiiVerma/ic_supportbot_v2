@@ -37,20 +37,46 @@ MICROSOFT_APP_TENANT_ID = os.getenv("MICROSOFT_APP_TENANT_ID")
 
 logger.info("Microsoft credentials loaded successfully")
 
-# MSAL
+# MSAL Cache Singleton & Thread Pool
+from concurrent.futures import ThreadPoolExecutor
+
+sync_executor = ThreadPoolExecutor(max_workers=20)
+
+class TeamsAuthCache:
+    def __init__(self):
+        self._app = None
+    
+    @property
+    def app(self):
+        if self._app is None:
+            if not MICROSOFT_APP_ID or not MICROSOFT_APP_PASSWORD or not MICROSOFT_APP_TENANT_ID:
+                logger.warning("Microsoft app credentials or tenant ID missing. TeamsAuthCache will run in mock/local mode.")
+                return None
+            self._app = msal.ConfidentialClientApplication(
+                client_id=MICROSOFT_APP_ID,
+                client_credential=MICROSOFT_APP_PASSWORD,
+                authority=f"https://login.microsoftonline.com/{MICROSOFT_APP_TENANT_ID}",
+            )
+        return self._app
+    
+    def get_access_token(self):
+        app = self.app
+        if app is None:
+            logger.warning("get_access_token called but MSAL is unconfigured. Returning mock token.")
+            return "mock-access-token"
+        # ConfidentialClientApplication handles internal memory caching by default.
+        # Reusing the application instance ensures we hit the cache.
+        result = app.acquire_token_for_client(
+            scopes=["https://api.botframework.com/.default"]
+        )
+        if "access_token" not in result:
+            raise Exception(f"TOKEN FAILED: {result}")
+        return result["access_token"]
+
+auth_cache = TeamsAuthCache()
 
 def _fixed_get_access_token(self):
-    app = msal.ConfidentialClientApplication(
-        client_id=MICROSOFT_APP_ID,
-        client_credential=MICROSOFT_APP_PASSWORD,
-        authority=f"https://login.microsoftonline.com/{MICROSOFT_APP_TENANT_ID}",
-    )
-    result = app.acquire_token_for_client(
-        scopes=["https://api.botframework.com/.default"]
-    )
-    if "access_token" not in result:
-        raise Exception(f"TOKEN FAILED: {result}")
-    return result["access_token"]
+    return auth_cache.get_access_token()
 
 MicrosoftAppCredentials.get_access_token = _fixed_get_access_token
 
@@ -58,6 +84,19 @@ MicrosoftAppCredentials.get_access_token = _fixed_get_access_token
 
 rag = None
 rag_status = "uninitialized"
+
+async def keep_databricks_warm():
+    """Background task to keep Databricks warehouse warm by querying it every 5 minutes."""
+    from app.db import fetch_df
+    while True:
+        try:
+            logger.info("Sending keep-alive ping to Databricks...")
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(sync_executor, fetch_df, "SELECT 1")
+            logger.info("Databricks keep-alive successful.")
+        except Exception as e:
+            logger.warning(f"Databricks keep-alive failed: {e}")
+        await asyncio.sleep(300) # Sleep for 5 minutes
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -89,8 +128,17 @@ async def lifespan(app: FastAPI):
             
     task.add_done_callback(_on_rag_done)
     
+    # Start background warm-up keep-alive loop
+    keepalive_task = asyncio.create_task(keep_databricks_warm())
+    
     yield
-    # Cleanup if needed on shutdown
+    
+    # Clean up keepalive task on shutdown
+    keepalive_task.cancel()
+    try:
+        await keepalive_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title="IC Compensation Chatbot", lifespan=lifespan)
@@ -181,13 +229,16 @@ async def handle_teams_message(turn_context: TurnContext):
         logger.info(f"Rep ID    : {rep_id}")
         logger.info("Calling get_rep_explanation")
 
-        reply = get_rep_explanation(
-            rep_id=rep_id,
-            question=message,
-            rag=rag,
-            llm=llm,
-            user_id=user_id,      
-            rep_name=user_name,   
+        loop = asyncio.get_running_loop()
+        reply = await loop.run_in_executor(
+            sync_executor,
+            get_rep_explanation,
+            rep_id,
+            message,
+            rag,
+            llm,
+            user_id,
+            user_name,
         )
 
         logger.info(f"Bot Reply : {reply}")
@@ -243,7 +294,7 @@ async def messages(req: Request):
 
 
 @app.post("/ask", response_model=AskResponse)
-def ask(data: AskRequest):
+async def ask(data: AskRequest):
     """
     REST endpoint for testing outside Teams.
     Pass a stable user_id so conversation memory works across calls.
@@ -254,13 +305,16 @@ def ask(data: AskRequest):
         # Second call will correctly resolve "why?" from the first call's context.
     """
     try:
-        result = get_rep_explanation(
-            rep_id=data.rep_id,
-            question=data.query,
-            rag=rag,
-            llm=llm,
-            user_id=data.user_id,   
-            rep_name=data.user_id,    
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            sync_executor,
+            get_rep_explanation,
+            data.rep_id,
+            data.query,
+            rag,
+            llm,
+            data.user_id,
+            data.user_id,
         )
         return AskResponse(text=result.strip())
 

@@ -11,7 +11,7 @@ OUTPUT FORMAT [FORMAT-BLOCK — apply to every response]
 8. Do not volunteer extra metrics not requested.
 9. Do not add summary lines or closing observations after the answer.
 """
-# GARBAGE / OUT-OF-SCOPE 
+# GARBAGE 
 _GARBAGE_HANDLER = """
 QUESTION CLASSIFICATION — run this check silently before every response.
 
