@@ -271,11 +271,11 @@ async def handle_teams_message(turn_context: TurnContext):
                         "actions": [
                             {
                                 "type": "Action.Submit",
-                                "title": "What is my Payout?",
+                                "title": "Show my IC payout for this quarter.",
                                 "data": {
                                     "msteams": {
                                         "type": "imBack",
-                                        "value": "What is my Payout?"
+                                        "value": "Show my IC payout for this quarter."
                                     }
                                 }
                             }
@@ -287,11 +287,11 @@ async def handle_teams_message(turn_context: TurnContext):
                         "actions": [
                             {
                                 "type": "Action.Submit",
-                                "title": "What is my Eligibility?",
+                                "title": "Explain my eligibility calculation.",
                                 "data": {
                                     "msteams": {
                                         "type": "imBack",
-                                        "value": "What is my Eligibility?"
+                                        "value": "Explain my eligibility calculation."
                                     }
                                 }
                             }
@@ -303,11 +303,11 @@ async def handle_teams_message(turn_context: TurnContext):
                         "actions": [
                             {
                                 "type": "Action.Submit",
-                                "title": "How many Credits do I have?",
+                                "title": "Show my credits by product.",
                                 "data": {
                                     "msteams": {
                                         "type": "imBack",
-                                        "value": "How many Credits do I have?"
+                                        "value": "Show my credits by product."
                                     }
                                 }
                             }
@@ -319,11 +319,11 @@ async def handle_teams_message(turn_context: TurnContext):
                         "actions": [
                             {
                                 "type": "Action.Submit",
-                                "title": "What is my Commission Earnings?",
+                                "title": "Share my current IC plan document.",
                                 "data": {
                                     "msteams": {
                                         "type": "imBack",
-                                        "value": "What is my Commission Earnings?"
+                                        "value": "Share my current IC plan document."
                                     }
                                 }
                             }
