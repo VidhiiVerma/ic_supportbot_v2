@@ -1,7 +1,8 @@
 import multiprocessing
 
-# Workers = (2 x $num_cores) + 1. For a standard Render instance (2 cores), 4 is optimal.
-workers = 4 
+# On Render Free tier (512MB RAM limit), we MUST run exactly 1 worker.
+# Our async ThreadPoolExecutor handles concurrent requests efficiently on a single worker process.
+workers = 1 
 
 # Use Uvicorn for ASGI compatibility
 worker_class = "uvicorn.workers.UvicornWorker"

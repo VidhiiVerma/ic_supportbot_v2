@@ -40,7 +40,7 @@ logger.info("Microsoft credentials loaded successfully")
 # MSAL Cache Singleton & Thread Pool
 from concurrent.futures import ThreadPoolExecutor
 
-sync_executor = ThreadPoolExecutor(max_workers=20)
+sync_executor = ThreadPoolExecutor(max_workers=10)
 
 class TeamsAuthCache:
     def __init__(self):
