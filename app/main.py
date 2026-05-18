@@ -287,12 +287,12 @@ async def handle_teams_message(turn_context: TurnContext):
         logger.info(f"Bot Reply : {reply}")
 
         await turn_context.send_activity(
-            Activity(
-                type=ActivityTypes.message,
-                text=reply,
-                text_format=TextFormatTypes.plain
+              Activity(
+                    type=ActivityTypes.message,
+                    text=reply,
+                    text_format=TextFormatTypes.markdown
+                )
             )
-        )
 
         logger.info("Response sent successfully")
 
