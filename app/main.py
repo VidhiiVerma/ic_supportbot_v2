@@ -264,48 +264,70 @@ async def handle_teams_message(turn_context: TurnContext):
                         "text": welcome_msg,
                         "wrap": True,
                         "size": "Medium"
-                    }
-                ],
-                "actions": [
-                    {
-                        "type": "Action.Submit",
-                        "title": "What is my Payout?",
-                        "data": {
-                            "msteams": {
-                                "type": "imBack",
-                                "value": "What is my Payout?"
-                            }
-                        }
                     },
                     {
-                        "type": "Action.Submit",
-                        "title": "What is my Eligibility?",
-                        "data": {
-                            "msteams": {
-                                "type": "imBack",
-                                "value": "What is my Eligibility?"
+                        "type": "ActionSet",
+                        "spacing": "Medium",
+                        "actions": [
+                            {
+                                "type": "Action.Submit",
+                                "title": "What is my Payout?",
+                                "data": {
+                                    "msteams": {
+                                        "type": "imBack",
+                                        "value": "What is my Payout?"
+                                    }
+                                }
                             }
-                        }
+                        ]
                     },
                     {
-                        "type": "Action.Submit",
-                        "title": "How many Credits do I have?",
-                        "data": {
-                            "msteams": {
-                                "type": "imBack",
-                                "value": "How many Credits do I have?"
+                        "type": "ActionSet",
+                        "spacing": "Medium",
+                        "actions": [
+                            {
+                                "type": "Action.Submit",
+                                "title": "What is my Eligibility?",
+                                "data": {
+                                    "msteams": {
+                                        "type": "imBack",
+                                        "value": "What is my Eligibility?"
+                                    }
+                                }
                             }
-                        }
+                        ]
                     },
                     {
-                        "type": "Action.Submit",
-                        "title": "What is my Commission Earnings?",
-                        "data": {
-                            "msteams": {
-                                "type": "imBack",
-                                "value": "What is my Commission Earnings?"
+                        "type": "ActionSet",
+                        "spacing": "Medium",
+                        "actions": [
+                            {
+                                "type": "Action.Submit",
+                                "title": "How many Credits do I have?",
+                                "data": {
+                                    "msteams": {
+                                        "type": "imBack",
+                                        "value": "How many Credits do I have?"
+                                    }
+                                }
                             }
-                        }
+                        ]
+                    },
+                    {
+                        "type": "ActionSet",
+                        "spacing": "Medium",
+                        "actions": [
+                            {
+                                "type": "Action.Submit",
+                                "title": "What is my Commission Earnings?",
+                                "data": {
+                                    "msteams": {
+                                        "type": "imBack",
+                                        "value": "What is my Commission Earnings?"
+                                    }
+                                }
+                            }
+                        ]
                     }
                 ]
             }
