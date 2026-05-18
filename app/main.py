@@ -218,9 +218,10 @@ def _strip_html(text: str) -> str:
 
 async def handle_teams_message(turn_context: TurnContext):
     try:
-        logger.info("===== NEW TEAMS MESSAGE =====")
-        user_name = turn_context.activity.from_property.name   
-        user_id   = turn_context.activity.from_property.id    
+        logger.info("NEW TEAMS MESSAGE")
+
+        user_name = turn_context.activity.from_property.name
+        user_id   = turn_context.activity.from_property.id
 
         message = _strip_html(turn_context.activity.text or "")
 
@@ -237,119 +238,41 @@ async def handle_teams_message(turn_context: TurnContext):
         msg_lower = message.lower().strip()
         GREETINGS = {"hi", "hello", "hey", "start", "help"}
 
+        # NORMAL GREETING WITHOUT 4 OPTIONS
         if msg_lower in GREETINGS:
+
             from app.db import get_rep_data
-            from botbuilder.schema import Attachment
+
             loop = asyncio.get_running_loop()
+
             rep_data = await loop.run_in_executor(
                 sync_executor,
                 get_rep_data,
                 rep_id,
             )
-            
+
             if rep_data and rep_data.get("payout"):
                 rep_name = rep_data["payout"].get("rep_name", user_name)
             else:
                 rep_name = user_name
-                
-            welcome_msg = f"Hello {rep_name}! How can I help you with your incentive compensation today?"
+
+            welcome_msg = (
+                f"Hello {rep_name}! "
+                f"How can I help you with your incentive compensation today?"
+            )
+
             logger.info(f"Greeting detected. Sending welcome msg: {welcome_msg}")
-            
-            adaptive_card_content = {
-                "type": "AdaptiveCard",
-                "version": "1.4",
-                "body": [
-                    {
-                        "type": "TextBlock",
-                        "text": welcome_msg,
-                        "wrap": True,
-                        "size": "Medium"
-                    },
-                    {
-                        "type": "ActionSet",
-                        "spacing": "Medium",
-                        "actions": [
-                            {
-                                "type": "Action.Submit",
-                                "title": "Show my IC payout for this quarter.",
-                                "data": {
-                                    "msteams": {
-                                        "type": "imBack",
-                                        "value": "Show my IC payout for this quarter."
-                                    }
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        "type": "ActionSet",
-                        "spacing": "Medium",
-                        "actions": [
-                            {
-                                "type": "Action.Submit",
-                                "title": "Explain my eligibility calculation.",
-                                "data": {
-                                    "msteams": {
-                                        "type": "imBack",
-                                        "value": "Explain my eligibility calculation."
-                                    }
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        "type": "ActionSet",
-                        "spacing": "Medium",
-                        "actions": [
-                            {
-                                "type": "Action.Submit",
-                                "title": "Show my credits by product.",
-                                "data": {
-                                    "msteams": {
-                                        "type": "imBack",
-                                        "value": "Show my credits by product."
-                                    }
-                                }
-                            }
-                        ]
-                    },
-                    {
-                        "type": "ActionSet",
-                        "spacing": "Medium",
-                        "actions": [
-                            {
-                                "type": "Action.Submit",
-                                "title": "Share my current IC plan document.",
-                                "data": {
-                                    "msteams": {
-                                        "type": "imBack",
-                                        "value": "Share my current IC plan document."
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                ]
-            }
-            
-            attachment = Attachment(
-                content_type="application/vnd.microsoft.card.adaptive",
-                content=adaptive_card_content
-            )
-            
-            await turn_context.send_activity(
-                Activity(
-                    type=ActivityTypes.message,
-                    attachments=[attachment]
-                )
-            )
-            logger.info("Greeting welcome message with Adaptive Card vertical buttons sent successfully.")
+
+            # SIMPLE TEXT RESPONSE
+            await turn_context.send_activity(welcome_msg)
+
             return
 
         logger.info(f"Rep ID    : {rep_id}")
         logger.info("Calling get_rep_explanation")
 
         loop = asyncio.get_running_loop()
+
         reply = await loop.run_in_executor(
             sync_executor,
             get_rep_explanation,
@@ -363,7 +286,6 @@ async def handle_teams_message(turn_context: TurnContext):
 
         logger.info(f"Bot Reply : {reply}")
 
-        # Explicitly send as plain text to avoid <div> injection in Teams UI
         await turn_context.send_activity(
             Activity(
                 type=ActivityTypes.message,
@@ -376,7 +298,57 @@ async def handle_teams_message(turn_context: TurnContext):
 
     except Exception as e:
         logger.error("Teams error", exc_info=True)
-        await turn_context.send_activity("An error occurred. Please try again.")
+
+        await turn_context.send_activity(
+            "An error occurred. Please try again."
+        )
+
+
+
+# ===========================
+# COMMENTED OUT ADAPTIVE CARD
+# ===========================
+
+# adaptive_card_content = {
+#     "type": "AdaptiveCard",
+#     "version": "1.4",
+#     "body": [
+#         {
+#             "type": "TextBlock",
+#             "text": welcome_msg,
+#             "wrap": True,
+#             "size": "Medium"
+#         },
+#         {
+#             "type": "ActionSet",
+#             "spacing": "Medium",
+#             "actions": [
+#                 {
+#                     "type": "Action.Submit",
+#                     "title": "Show my IC payout for this quarter.",
+#                     "data": {
+#                         "msteams": {
+#                             "type": "imBack",
+#                             "value": "Show my IC payout for this quarter."
+#                         }
+#                     }
+#                 }
+#             ]
+#         }
+#     ]
+# }
+
+# attachment = Attachment(
+#     content_type="application/vnd.microsoft.card.adaptive",
+#     content=adaptive_card_content
+# )
+
+# await turn_context.send_activity(
+#     Activity(
+#         type=ActivityTypes.message,
+#         attachments=[attachment]
+#     )
+# )
 
 
 @app.get("/")

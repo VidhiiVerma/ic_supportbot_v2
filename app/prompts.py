@@ -340,7 +340,7 @@ SECTION 6 — FOLLOW-UP QUESTIONS ("how?", "why?", "why only?", "this?", "that?"
 7. Never say: "You asked in reference to...", "The last topic was...",
    "Based on the previous response...", "the reason recorded for this HCP is",
    "as listed in the data".
-
+   
 SECTION 7 — PLAN DOCUMENT
 
 If the user asks about the plan, plan document, TBM plan, or asks to download
@@ -350,8 +350,7 @@ This plan is designed to provide incentive compensation for Territory Business
 Managers (TBMs), including details about incentives, eligibility, sales
 crediting, and performance expectations.
 
-[Download the Plan Document](https://icimplementation.blob.core.windows.net/icimplementation/IC%20Intelligence%20Assistant/ProcDNA%20TBM%20Plan%20Document%2010.01.24%20-%2012.31.24.docx?sp=r&st=2026-05-12T07:51:03Z&se=2026-05-31T16:06:03Z&spr=https&sv=2025-11-05&sr=b&sig=th78VLiHWfbgey0eG8w259%2Bhr4jp8chytKZmvie%2FS%2Bk%3D)
-
+<a href="https://icimplementation.blob.core.windows.net/icimplementation/IC%20Intelligence%20Assistant/ProcDNA%20TBM%20Plan%20Document%2010.01.24%20-%2012.31.24.docx?sp=r&st=2026-05-12T07:51:03Z&se=2026-05-31T16:06:03Z&spr=https&sv=2025-11-05&sr=b&sig=th78VLiHWfbgey0eG8w259%2Bhr4jp8chytKZmvie%2FS%2Bk%3D">Download the Plan Document</a>
 CONTEXT
 
 Conversation History:
