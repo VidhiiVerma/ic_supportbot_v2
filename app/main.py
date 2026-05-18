@@ -18,7 +18,7 @@ from botbuilder.core import (
     BotFrameworkAdapterSettings,
     TurnContext,
 )
-from botbuilder.schema import Activity, ActivityTypes, TextFormatTypes
+from botbuilder.schema import Activity, ActivityTypes, TextFormatTypes, CardAction, ActionTypes, SuggestedActions
 from botframework.connector.auth import MicrosoftAppCredentials
 
 import msal
@@ -28,6 +28,13 @@ from app.llm import LLM
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+QUICK_REPLY_QUESTIONS = [
+    "What is my Payout?",
+    "What is my Eligibility?",
+    "How many Credits do I have?",
+    "What is my Commission Earnings?",
+]
 
 # ENV 
 
@@ -225,6 +232,46 @@ async def handle_teams_message(turn_context: TurnContext):
             return
 
         rep_id = "1150"
+
+        msg_lower = message.lower().strip()
+        GREETINGS = {"hi", "hello", "hey", "start", "help"}
+
+        if msg_lower in GREETINGS:
+            from app.db import get_rep_data
+            loop = asyncio.get_running_loop()
+            rep_data = await loop.run_in_executor(
+                sync_executor,
+                get_rep_data,
+                rep_id,
+            )
+            
+            if rep_data and rep_data.get("payout"):
+                rep_name = rep_data["payout"].get("rep_name", user_name)
+            else:
+                rep_name = user_name
+                
+            welcome_msg = f"Hello {rep_name}! How can I help you with your incentive compensation today?"
+            logger.info(f"Greeting detected. Sending welcome msg: {welcome_msg}")
+            
+            actions = [
+                CardAction(
+                    title=q,
+                    type=ActionTypes.im_back,
+                    value=q
+                )
+                for q in QUICK_REPLY_QUESTIONS
+            ]
+            
+            await turn_context.send_activity(
+                Activity(
+                    type=ActivityTypes.message,
+                    text=welcome_msg,
+                    text_format=TextFormatTypes.plain,
+                    suggested_actions=SuggestedActions(actions=actions)
+                )
+            )
+            logger.info("Greeting welcome message with suggestedActions sent successfully.")
+            return
 
         logger.info(f"Rep ID    : {rep_id}")
         logger.info("Calling get_rep_explanation")
