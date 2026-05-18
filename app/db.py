@@ -29,13 +29,13 @@ if not DATABRICKS_HOST or not DATABRICKS_HTTP_PATH or not DATABRICKS_TOKEN:
 logger.info("Databricks config loaded successfully.")
 
 
-#  THREAD-SAFE CONNECTION POOL
+#  HIGH-PERFORMANCE THREAD-SAFE CONNECTION POOL
 class DatabricksConnectionPool:
     def __init__(self, size=10):
-        self._pool = queue.Queue(maxsize=size)
+        self._pool = queue.Queue()
         self.size = size
-        for _ in range(size):
-            self._pool.put(None)
+        self._created = 0
+        self._lock = threading.Lock()
             
     def _create_connection(self):
         logger.info("Opening a new Databricks connection...")
@@ -46,33 +46,35 @@ class DatabricksConnectionPool:
         )
 
     def get_connection(self):
-        conn = self._pool.get()
-        if conn is None:
-            return self._create_connection()
-        
-        # Test connection validity with a simple lightweight ping/check
+        # 1. Try to fetch an existing warm connection from the pool immediately
         try:
-            with conn.cursor() as cursor:
-                # Verifies standard state of connection session
-                pass
-            return conn
-        except Exception as e:
-            logger.warning(f"Stale or dead connection detected in pool. Reconnecting... Error: {e}")
+            conn = self._pool.get_nowait()
+            # Test connection validity with a simple lightweight ping/check
             try:
-                conn.close()
-            except Exception:
-                pass
-            return self._create_connection()
-
-    def release_connection(self, conn):
-        if conn is not None:
-            try:
-                self._pool.put(conn, block=False)
-            except queue.Full:
+                with conn.cursor() as cursor:
+                    pass
+                return conn
+            except Exception as e:
+                logger.warning(f"Stale connection detected in pool. Reconnecting... Error: {e}")
                 try:
                     conn.close()
                 except Exception:
                     pass
+                return self._create_connection()
+        except queue.Empty:
+            # 2. Pool is empty. Create a new connection if we haven't reached the limit
+            with self._lock:
+                if self._created < self.size:
+                    self._created += 1
+                    return self._create_connection()
+            
+            # 3. If pool is full and completely busy, block and wait for a connection to be released
+            logger.info("Databricks connection pool limit reached. Waiting for connection release...")
+            return self._pool.get(block=True)
+
+    def release_connection(self, conn):
+        if conn is not None:
+            self._pool.put(conn)
 
 # Instantiate global connection pool
 db_pool = DatabricksConnectionPool(size=10)
@@ -96,11 +98,16 @@ def fetch_df(query: str, params: tuple = ()) -> pd.DataFrame:
                 df = pd.DataFrame(rows, columns=columns)
                 return df
         except Exception as e:
-            # If connection issue, discard the connection rather than returning it to the pool
+            # Discard dead/broken connections on exception
             try:
                 conn.close()
             except Exception:
                 pass
+            
+            # Decrement connection counter so pool can recreate it
+            with db_pool._lock:
+                if db_pool._created > 0:
+                    db_pool._created -= 1
             
             if attempt < max_retries - 1:
                 logger.warning(f"Query failed (attempt {attempt+1}/{max_retries}). Retrying... Error: {e}")
@@ -110,7 +117,7 @@ def fetch_df(query: str, params: tuple = ()) -> pd.DataFrame:
                 logger.error("Query failed permanently after retries.", exc_info=True)
                 raise
         finally:
-            # If connection was successful, release it back to pool
+            # Release connection back to pool if not broken
             db_pool.release_connection(conn)
 
 
