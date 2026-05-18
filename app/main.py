@@ -17,8 +17,9 @@ from botbuilder.core import (
     BotFrameworkAdapter,
     BotFrameworkAdapterSettings,
     TurnContext,
+    CardFactory,
 )
-from botbuilder.schema import Activity, ActivityTypes, TextFormatTypes, CardAction, ActionTypes, SuggestedActions
+from botbuilder.schema import Activity, ActivityTypes, TextFormatTypes, CardAction, ActionTypes, SuggestedActions, HeroCard
 from botframework.connector.auth import MicrosoftAppCredentials
 
 import msal
@@ -255,22 +256,41 @@ async def handle_teams_message(turn_context: TurnContext):
             
             actions = [
                 CardAction(
-                    title=q,
+                    title="1. What is my Payout?",
                     type=ActionTypes.im_back,
-                    value=q
+                    value="What is my Payout?"
+                ),
+                CardAction(
+                    title="2. What is my Eligibility?",
+                    type=ActionTypes.im_back,
+                    value="What is my Eligibility?"
+                ),
+                CardAction(
+                    title="3. How many Credits do I have?",
+                    type=ActionTypes.im_back,
+                    value="How many Credits do I have?"
+                ),
+                CardAction(
+                    title="4. What is my Commission Earnings?",
+                    type=ActionTypes.im_back,
+                    value="What is my Commission Earnings?"
                 )
-                for q in QUICK_REPLY_QUESTIONS
             ]
+            
+            hero_card = HeroCard(
+                buttons=actions
+            )
+            attachment = CardFactory.hero_card(hero_card)
             
             await turn_context.send_activity(
                 Activity(
                     type=ActivityTypes.message,
                     text=welcome_msg,
                     text_format=TextFormatTypes.plain,
-                    suggested_actions=SuggestedActions(actions=actions)
+                    attachments=[attachment]
                 )
             )
-            logger.info("Greeting welcome message with suggestedActions sent successfully.")
+            logger.info("Greeting welcome message with HeroCard vertical buttons sent successfully.")
             return
 
         logger.info(f"Rep ID    : {rep_id}")
