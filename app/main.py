@@ -239,6 +239,7 @@ async def handle_teams_message(turn_context: TurnContext):
 
         if msg_lower in GREETINGS:
             from app.db import get_rep_data
+            from botbuilder.schema import Attachment
             loop = asyncio.get_running_loop()
             rep_data = await loop.run_in_executor(
                 sync_executor,
@@ -254,43 +255,73 @@ async def handle_teams_message(turn_context: TurnContext):
             welcome_msg = f"Hello {rep_name}! How can I help you with your incentive compensation today?"
             logger.info(f"Greeting detected. Sending welcome msg: {welcome_msg}")
             
-            actions = [
-                CardAction(
-                    title="1. What is my Payout?",
-                    type=ActionTypes.im_back,
-                    value="What is my Payout?"
-                ),
-                CardAction(
-                    title="2. What is my Eligibility?",
-                    type=ActionTypes.im_back,
-                    value="What is my Eligibility?"
-                ),
-                CardAction(
-                    title="3. How many Credits do I have?",
-                    type=ActionTypes.im_back,
-                    value="How many Credits do I have?"
-                ),
-                CardAction(
-                    title="4. What is my Commission Earnings?",
-                    type=ActionTypes.im_back,
-                    value="What is my Commission Earnings?"
-                )
-            ]
+            adaptive_card_content = {
+                "type": "AdaptiveCard",
+                "version": "1.4",
+                "body": [
+                    {
+                        "type": "TextBlock",
+                        "text": welcome_msg,
+                        "wrap": True,
+                        "size": "Medium"
+                    }
+                ],
+                "actions": [
+                    {
+                        "type": "Action.Submit",
+                        "title": "What is my Payout?",
+                        "data": {
+                            "msteams": {
+                                "type": "imBack",
+                                "value": "What is my Payout?"
+                            }
+                        }
+                    },
+                    {
+                        "type": "Action.Submit",
+                        "title": "What is my Eligibility?",
+                        "data": {
+                            "msteams": {
+                                "type": "imBack",
+                                "value": "What is my Eligibility?"
+                            }
+                        }
+                    },
+                    {
+                        "type": "Action.Submit",
+                        "title": "How many Credits do I have?",
+                        "data": {
+                            "msteams": {
+                                "type": "imBack",
+                                "value": "How many Credits do I have?"
+                            }
+                        }
+                    },
+                    {
+                        "type": "Action.Submit",
+                        "title": "What is my Commission Earnings?",
+                        "data": {
+                            "msteams": {
+                                "type": "imBack",
+                                "value": "What is my Commission Earnings?"
+                            }
+                        }
+                    }
+                ]
+            }
             
-            hero_card = HeroCard(
-                buttons=actions
+            attachment = Attachment(
+                content_type="application/vnd.microsoft.card.adaptive",
+                content=adaptive_card_content
             )
-            attachment = CardFactory.hero_card(hero_card)
             
             await turn_context.send_activity(
                 Activity(
                     type=ActivityTypes.message,
-                    text=welcome_msg,
-                    text_format=TextFormatTypes.plain,
                     attachments=[attachment]
                 )
             )
-            logger.info("Greeting welcome message with HeroCard vertical buttons sent successfully.")
+            logger.info("Greeting welcome message with Adaptive Card vertical buttons sent successfully.")
             return
 
         logger.info(f"Rep ID    : {rep_id}")
