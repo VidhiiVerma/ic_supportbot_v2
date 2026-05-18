@@ -19,6 +19,7 @@ from botbuilder.core import (
     TurnContext,
     CardFactory,
 )
+from botbuilder.core.teams import TeamsInfo
 from botbuilder.schema import Activity, ActivityTypes, TextFormatTypes, CardAction, ActionTypes, SuggestedActions, HeroCard
 from botframework.connector.auth import MicrosoftAppCredentials
 
@@ -223,10 +224,17 @@ async def handle_teams_message(turn_context: TurnContext):
         user_name = turn_context.activity.from_property.name
         user_id   = turn_context.activity.from_property.id
 
+        member = await TeamsInfo.get_member(
+            turn_context,
+            user_id
+        )
+        email = member.email
+
         message = _strip_html(turn_context.activity.text or "")
 
         logger.info(f"User Name : {user_name}")
         logger.info(f"User ID   : {user_id}")
+        logger.info(f"User Email: {email}")
         logger.info(f"Message   : {message}")
 
         if not message:
