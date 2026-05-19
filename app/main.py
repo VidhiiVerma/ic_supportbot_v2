@@ -48,10 +48,10 @@ logger = logging.getLogger(__name__)
 # =========================================================
 
 QUICK_REPLY_QUESTIONS = [
-    "What is my Payout?",
-    "What is my Eligibility?",
-    "How many Credits do I have?",
-    "What is my Commission Earnings?",
+    "Show my IC payout for this quarter.",
+    "Explain my eligibility for the current period.",
+    "Show my credits by product.",
+    "Share my current IC plan document.",
 ]
 
 # =========================================================
@@ -141,7 +141,11 @@ rag_status = "uninitialized"
 # =========================================================
 
 async def keep_databricks_warm():
-
+    """
+    Keeps the Databricks / SQL connection warm so the first user message
+    after an idle period does not hit a cold-start delay.
+    Runs every 90 seconds (well within the typical 5-minute idle timeout).
+    """
     from app.db import fetch_df
 
     while True:
@@ -162,7 +166,8 @@ async def keep_databricks_warm():
         except Exception as e:
             logger.warning(f"Databricks keep-alive failed: {e}")
 
-        await asyncio.sleep(300)
+        # 90-second interval keeps connections alive through short idle gaps
+        await asyncio.sleep(90)
 
 # =========================================================
 # FASTAPI LIFESPAN
@@ -345,20 +350,33 @@ class AskResponse(BaseModel):
 # =========================================================
 
 def _strip_html(text: str) -> str:
-
+    """
+    Decode HTML entities and remove genuine HTML tags.
+    Preserves literal '<' and '>' that are not part of an HTML tag
+    (e.g. the raw text that Teams echoes back from an imBack action).
+    """
     if not text:
         return ""
 
+    # Decode HTML entities first
     clean_text = (
         text.replace("&nbsp;", " ")
         .replace("&lt;", "<")
         .replace("&gt;", ">")
         .replace("&amp;", "&")
+        .replace("&quot;", '"')
+        .replace("&#39;", "'")
     )
 
-    clean_text = re.sub(r"<[^>]+>", "", clean_text)
+    # Remove genuine HTML tags only (tags that contain at least one letter/slash)
+    # This avoids stripping plain '<word>' text that is NOT an HTML tag.
+    clean_text = re.sub(r"</?[a-zA-Z][^>]*>", "", clean_text)
 
-    return clean_text.strip()
+    # Strip any residual lone angle-bracket pairs that wrap the entire message
+    # (Teams sometimes wraps imBack text in <at>…</at> spans already handled above)
+    clean_text = clean_text.strip()
+
+    return clean_text
 
 # =========================================================
 # TEAMS HANDLER
@@ -467,22 +485,33 @@ async def handle_teams_message(turn_context: TurnContext):
 
                     {
                         "type": "Action.Submit",
-                        "title": "What is my eligibility?",
+                        "title": "Explain my eligibility for the current period.",
                         "data": {
                             "msteams": {
                                 "type": "imBack",
-                                "value": "What is my eligibility?"
+                                "value": "Explain my eligibility for the current period."
                             }
                         }
                     },
 
                     {
                         "type": "Action.Submit",
-                        "title": "How many credits do I have?",
+                        "title": "Show my credits by product.",
                         "data": {
                             "msteams": {
                                 "type": "imBack",
-                                "value": "How many credits do I have?"
+                                "value": "Show my credits by product."
+                            }
+                        }
+                    },
+
+                    {
+                        "type": "Action.Submit",
+                        "title": "Share my current IC plan document.",
+                        "data": {
+                            "msteams": {
+                                "type": "imBack",
+                                "value": "Share my current IC plan document."
                             }
                         }
                     }
@@ -509,6 +538,15 @@ async def handle_teams_message(turn_context: TurnContext):
 
         logger.info(f"Rep ID    : {rep_id}")
         logger.info("Calling get_rep_explanation")
+
+        # Send a typing indicator immediately so Teams shows activity
+        # while the DB / LLM call is in flight (handles cold-start latency).
+        try:
+            await turn_context.send_activity(
+                Activity(type=ActivityTypes.typing)
+            )
+        except Exception:
+            pass  # typing indicator is best-effort
 
         loop = asyncio.get_running_loop()
 

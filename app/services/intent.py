@@ -15,6 +15,7 @@ DIRECT_DATA_WORDS = {
     "how many",
     "count",
     "total",
+    "share",           # "share my current IC plan document"
 }
 
 EXPLANATION_WORDS = {
@@ -24,11 +25,22 @@ EXPLANATION_WORDS = {
     "calculate",
     "calculated",
     "calculation",
+    "current period",  # "explain my eligibility for the current period"
 }
 
 ELIGIBILITY_WORDS = {
     "eligibility",
     "eligible",
+    "current period",  # "explain my eligibility for the current period"
+}
+
+PLAN_WORDS = {
+    "plan document",
+    "ic plan",
+    "plan doc",
+    "download the plan",
+    "share my current ic plan",
+    "current ic plan",
 }
 
 HCP_WORDS = {
@@ -51,6 +63,11 @@ def detect_intents(question: str) -> list[str]:
 
     if any(word in q for word in THANK_WORDS):
         return ["thanks"]
+
+    # Plan document must be checked BEFORE generic direct_data so it gets
+    # routed to policy/plan rather than a data fetch.
+    if any(word in q for word in PLAN_WORDS):
+        return ["policy"]
 
     if any(word in q for word in DIRECT_DATA_WORDS):
         intents.append("direct_data")
