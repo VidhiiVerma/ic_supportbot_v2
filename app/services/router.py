@@ -170,16 +170,7 @@ HCP NAMES:
     llm_time = time.time() - start_llm
     logger.info(f"LLM Generation took {llm_time:.2f}s")
 
-    data_snapshot = dict(calc) if calc else {}
-    if payout:
-        data_snapshot.update({
-            k: payout[k]
-            for k in (
-                "qtd_trx", "qtd_trx_goal", "target_pay",
-                "ic_earning_rate", "ic_earnings_rate",
-            )
-            if k in payout
-        })
+    data_snapshot = dict(payout) if payout else {}
 
     save_turn(                       
         user_id=user_id,
