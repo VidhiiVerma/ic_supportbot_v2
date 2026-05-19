@@ -312,51 +312,46 @@ async def handle_teams_message(turn_context: TurnContext):
         )
 
 
+adaptive_card_content = {
+    "type": "AdaptiveCard",
+    "version": "1.4",
+    "body": [
+        {
+            "type": "TextBlock",
+            "text": welcome_msg,
+            "wrap": True,
+            "size": "Medium"
+        },
+        {
+            "type": "ActionSet",
+            "spacing": "Medium",
+            "actions": [
+                {
+                    "type": "Action.Submit",
+                    "title": "Show my IC payout for this quarter.",
+                    "data": {
+                        "msteams": {
+                            "type": "imBack",
+                            "value": "Show my IC payout for this quarter."
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}
 
-# ===========================
-# COMMENTED OUT ADAPTIVE CARD
-# ===========================
+attachment = Attachment(
+    content_type="application/vnd.microsoft.card.adaptive",
+    content=adaptive_card_content
+)
 
-# adaptive_card_content = {
-#     "type": "AdaptiveCard",
-#     "version": "1.4",
-#     "body": [
-#         {
-#             "type": "TextBlock",
-#             "text": welcome_msg,
-#             "wrap": True,
-#             "size": "Medium"
-#         },
-#         {
-#             "type": "ActionSet",
-#             "spacing": "Medium",
-#             "actions": [
-#                 {
-#                     "type": "Action.Submit",
-#                     "title": "Show my IC payout for this quarter.",
-#                     "data": {
-#                         "msteams": {
-#                             "type": "imBack",
-#                             "value": "Show my IC payout for this quarter."
-#                         }
-#                     }
-#                 }
-#             ]
-#         }
-#     ]
-# }
-
-# attachment = Attachment(
-#     content_type="application/vnd.microsoft.card.adaptive",
-#     content=adaptive_card_content
-# )
-
-# await turn_context.send_activity(
-#     Activity(
-#         type=ActivityTypes.message,
-#         attachments=[attachment]
-#     )
-# )
+await turn_context.send_activity(
+    Activity(
+        type=ActivityTypes.message,
+        attachments=[attachment]
+    )
+)
 
 
 @app.get("/")
