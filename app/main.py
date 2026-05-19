@@ -19,6 +19,7 @@ from botbuilder.core import (
     BotFrameworkAdapterSettings,
     TurnContext,
 )
+
 from botbuilder.core.teams import TeamsInfo
 
 from botbuilder.schema import (
@@ -35,14 +36,27 @@ import msal
 from app.services.router import get_rep_explanation
 from app.llm import LLM
 
+# =========================================================
+# LOGGING
+# =========================================================
+
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger
+logger = logging.getLogger(__name__)
+
+# =========================================================
+# QUICK REPLIES
+# =========================================================
+
+QUICK_REPLY_QUESTIONS = [
+    "What is my Payout?",
     "What is my Eligibility?",
     "How many Credits do I have?",
     "What is my Commission Earnings?",
 ]
 
-# ENV
+# =========================================================
+# ENV VARIABLES
+# =========================================================
 
 MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID")
 MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD")
@@ -50,18 +64,24 @@ MICROSOFT_APP_TENANT_ID = os.getenv("MICROSOFT_APP_TENANT_ID")
 
 logger.info("Microsoft credentials loaded successfully")
 
+# =========================================================
 # THREAD POOL
+# =========================================================
 
 sync_executor = ThreadPoolExecutor(max_workers=10)
 
+# =========================================================
 # MSAL CACHE
+# =========================================================
 
 class TeamsAuthCache:
+
     def __init__(self):
         self._app = None
 
     @property
     def app(self):
+
         if self._app is None:
 
             if (
@@ -70,7 +90,7 @@ class TeamsAuthCache:
                 or not MICROSOFT_APP_TENANT_ID
             ):
                 logger.warning(
-                    "Microsoft credentials missing. Running in local/mock mode."
+                    "Microsoft credentials missing. Running in mock mode."
                 )
                 return None
 
@@ -83,10 +103,11 @@ class TeamsAuthCache:
         return self._app
 
     def get_access_token(self):
+
         app = self.app
 
         if app is None:
-            logger.warning("MSAL unconfigured. Returning mock token.")
+            logger.warning("MSAL not configured.")
             return "mock-access-token"
 
         result = app.acquire_token_for_client(
@@ -108,17 +129,23 @@ def _fixed_get_access_token(self):
 
 MicrosoftAppCredentials.get_access_token = _fixed_get_access_token
 
-# APP STATE
+# =========================================================
+# GLOBAL APP STATE
+# =========================================================
 
 rag = None
 rag_status = "uninitialized"
 
-# DATABRICKS KEEPALIVE
+# =========================================================
+# DATABRICKS KEEP ALIVE
+# =========================================================
 
 async def keep_databricks_warm():
+
     from app.db import fetch_df
 
     while True:
+
         try:
             logger.info("Sending keep-alive ping to Databricks...")
 
@@ -133,18 +160,26 @@ async def keep_databricks_warm():
             logger.info("Databricks keep-alive successful.")
 
         except Exception as e:
-            logger.warning(f"Data
+            logger.warning(f"Databricks keep-alive failed: {e}")
+
+        await asyncio.sleep(300)
+
+# =========================================================
+# FASTAPI LIFESPAN
+# =========================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
 
-    global rag, rag_status
+    global rag
+    global rag_status
 
     rag_status = "initializing"
 
     logger.info("Starting background RAG initialization...")
 
     def init_rag():
+
         try:
             from rag.pipeline import RAGSystem
 
@@ -161,20 +196,27 @@ async def lifespan(app: FastAPI):
         asyncio.to_thread(init_rag)
     )
 
-    def _on_rag_done(t):
-        global rag, rag_status
+    def on_rag_done(t):
+
+        global rag
+        global rag_status
 
         try:
             rag, rag_status = t.result()
+
             logger.info(
                 f"RAG background task completed. Status: {rag_status}"
             )
 
         except Exception as e:
-            rag_status = f"error: {str(e)}"
-            logger.error(f"RAG background task failed: {e}")
 
-    task.add_done_callback(_on_rag_done)
+            rag_status = f"error: {str(e)}"
+
+            logger.error(
+                f"RAG background task failed: {e}"
+            )
+
+    task.add_done_callback(on_rag_done)
 
     keepalive_task = asyncio.create_task(
         keep_databricks_warm()
@@ -185,12 +227,23 @@ async def lifespan(app: FastAPI):
     keepalive_task.cancel()
 
     try:
-        a
+        await keepalive_task
+
+    except asyncio.CancelledError:
+        pass
+
+# =========================================================
+# FASTAPI APP
+# =========================================================
 
 app = FastAPI(
     title="IC Compensation Chatbot",
     lifespan=lifespan
 )
+
+# =========================================================
+# CORS
+# =========================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -200,7 +253,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# =========================================================
 # REQUEST LOGGER
+# =========================================================
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -212,6 +267,7 @@ async def log_requests(request: Request, call_next):
     )
 
     try:
+
         response = await call_next(request)
 
         process_time = time.time() - start_time
@@ -223,22 +279,26 @@ async def log_requests(request: Request, call_next):
         return response
 
     except Exception as e:
+
         logger.error(
             f"Unhandled Exception in Request: {e}",
             exc_info=True
         )
+
         raise
 
-# HEALTH
-
-@app.get("/ping")
-async def ping():
-    return {"status": "ok", "message": "pong"}
-
+# =========================================================
+# HEALTH ROUTES
+# =========================================================
 
 @app.get("/")
 def root():
     return {"message": "API running"}
+
+
+@app.get("/ping")
+async def ping():
+    return {"status": "ok", "message": "pong"}
 
 
 @app.get("/health")
@@ -248,7 +308,9 @@ def health():
         "rag_status": rag_status
     }
 
-# BOT ADAPTER
+# =========================================================
+# BOT FRAMEWORK ADAPTER
+# =========================================================
 
 adapter_settings = BotFrameworkAdapterSettings(
     app_id=MICROSOFT_APP_ID,
@@ -258,11 +320,15 @@ adapter_settings = BotFrameworkAdapterSettings(
 
 adapter = BotFrameworkAdapter(adapter_settings)
 
+# =========================================================
 # LLM
+# =========================================================
 
 llm = LLM()
 
-# MODELS
+# =========================================================
+# REQUEST MODELS
+# =========================================================
 
 class AskRequest(BaseModel):
     query: str
@@ -274,7 +340,9 @@ class AskResponse(BaseModel):
     text: str
     status: str = "success"
 
+# =========================================================
 # HELPERS
+# =========================================================
 
 def _strip_html(text: str) -> str:
 
@@ -292,11 +360,14 @@ def _strip_html(text: str) -> str:
 
     return clean_text.strip()
 
+# =========================================================
 # TEAMS HANDLER
+# =========================================================
 
 async def handle_teams_message(turn_context: TurnContext):
 
     try:
+
         logger.info("NEW TEAMS MESSAGE")
 
         user_name = turn_context.activity.from_property.name
@@ -319,9 +390,11 @@ async def handle_teams_message(turn_context: TurnContext):
         logger.info(f"Message   : {message}")
 
         if not message:
+
             await turn_context.send_activity(
                 "Send a message."
             )
+
             return
 
         rep_id = "1150"
@@ -333,8 +406,12 @@ async def handle_teams_message(turn_context: TurnContext):
             "hello",
             "hey",
             "start",
-            "help"
-        # GREETIN
+            "help",
+        }
+
+        # =================================================
+        # GREETING FLOW
+        # =================================================
 
         if msg_lower in GREETINGS:
 
@@ -349,20 +426,18 @@ async def handle_teams_message(turn_context: TurnContext):
             )
 
             if rep_data and rep_data.get("payout"):
+
                 rep_name = rep_data["payout"].get(
                     "rep_name",
                     user_name
                 )
+
             else:
                 rep_name = user_name
 
             welcome_msg = (
                 f"Hello {rep_name}! "
                 f"How can I help you with your incentive compensation today?"
-            )
-
-            logger.info(
-                f"Greeting detected. Sending welcome msg: {welcome_msg}"
             )
 
             adaptive_card_content = {
@@ -426,8 +501,11 @@ async def handle_teams_message(turn_context: TurnContext):
                 )
             )
 
-            r
-        # MAIN QUER
+            return
+
+        # =================================================
+        # MAIN QUERY FLOW
+        # =================================================
 
         logger.info(f"Rep ID    : {rep_id}")
         logger.info("Calling get_rep_explanation")
@@ -451,7 +529,7 @@ async def handle_teams_message(turn_context: TurnContext):
             Activity(
                 type=ActivityTypes.message,
                 text=reply,
-                text_format=TextFormatTypes.plain
+                text_format=TextFormatTypes.plain,
             )
         )
 
@@ -468,12 +546,15 @@ async def handle_teams_message(turn_context: TurnContext):
             "An error occurred. Please try again."
         )
 
-# TEAMS ENDPOINT
+# =========================================================
+# TEAMS ROUTE
+# =========================================================
 
 @app.post("/api/messages")
 async def messages(req: Request):
 
     try:
+
         body_bytes = await req.body()
 
         logger.info(
@@ -513,12 +594,15 @@ async def messages(req: Request):
             detail="Bot adapter failed to process activity"
         )
 
-# REST ASK ENDPOINT
+# =========================================================
+# ASK ROUTE
+# =========================================================
 
 @app.post("/ask", response_model=AskResponse)
 async def ask(data: AskRequest):
 
     try:
+
         loop = asyncio.get_running_loop()
 
         result = await loop.run_in_executor(
