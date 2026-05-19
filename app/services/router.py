@@ -5,7 +5,7 @@ from app.db import get_rep_data
 
 from app.prompts import ORCHESTRATION_PROMPT
 
-from app.services.calculation import calculate_ic
+
 
 from app.services.hcp import (
     get_total_credits,
@@ -14,7 +14,7 @@ from app.services.hcp import (
     count_unique_hcps,
 )
 
-from app.formatter import format_calc_for_llm, format_dict_for_llm
+from app.formatter import format_dict_for_llm
 
 from app.conversation_memory import (
     get_formatted_history,
@@ -86,18 +86,8 @@ def get_rep_explanation(
     eligibility = rep_data.get("eligibility", {})
     sales_rows  = rep_data.get("sales", [])
 
-    # Clean payout data to remove pre-calculated values that conflict with deterministic calculations
-    payout_clean = {
-        k: v for k, v in payout.items()
-        if k not in {
-            "total_projected_incremental_trx",
-            "commission_rate",
-            "commission_earnings_value",
-            "total__ic_earnings",
-            "total_ic_payout",
-            "ic_earnings_value"
-        }
-    }
+    # Pass through all payout fields — values come directly from the Excel upload
+    payout_clean = payout
 
     rows = [
         r for r in sales_rows
@@ -119,10 +109,7 @@ def get_rep_explanation(
         or "TBM"
     )
 
-    # DETERMINISTIC CALCULATION
 
-    calc           = calculate_ic(rep_data)
-    formatted_calc = format_calc_for_llm(calc) if calc else "data not available"
 
     # HCP / CREDIT DATA 
 
@@ -164,9 +151,6 @@ PAYOUT DATA:
 
 ELIGIBILITY DATA:
 {format_dict_for_llm(eligibility)}
-
-CALCULATED VALUES:
-{formatted_calc}
 
 HCP COUNT:         {total_hcps}
 TOTAL CREDITS:     {total_credits}
