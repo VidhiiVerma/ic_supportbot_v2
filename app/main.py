@@ -415,7 +415,35 @@ async def handle_teams_message(turn_context: TurnContext):
 
             return
 
-        rep_id = "1150"
+        # =================================================
+        # ACCESS CONTROL & USER RESOLUTION
+        # =================================================
+        from app.db import fetch_rep_id_by_email
+
+        loop = asyncio.get_running_loop()
+        resolved_rep_id = await loop.run_in_executor(
+            sync_executor,
+            fetch_rep_id_by_email,
+            email,
+        )
+
+        if not resolved_rep_id:
+            logger.warning(f"Access Denied: Email '{email}' not found in user_access.")
+            denied_msg = (
+                f"Access Denied: Your email address ({email}) is not registered in the "
+                "incentive compensation system. Please contact your system administrator."
+            )
+            await turn_context.send_activity(
+                Activity(
+                    type=ActivityTypes.message,
+                    text=denied_msg,
+                    text_format=TextFormatTypes.plain,
+                )
+            )
+            return
+
+        rep_id = resolved_rep_id
+        logger.info(f"Dynamically resolved Rep ID: {rep_id} for email: {email}")
 
         msg_lower = message.lower().strip()
 

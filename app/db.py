@@ -175,6 +175,30 @@ def fetch_eligibility_data(rep_name: str):
     return df.iloc[0].to_dict() if not df.empty else {}
 
 
+def fetch_rep_id_by_email(email: str):
+    """
+    Looks up the Rep ID for the given email (case-insensitive) in user_access.
+    """
+    if not email:
+        return None
+    try:
+        query = """
+        SELECT `Rep ID`
+        FROM ic_implementation.ic_intelligence.user_access
+        WHERE LOWER(TRIM(Email)) = ?
+        """
+        df = fetch_df(query, (str(email).lower().strip(),))
+        if not df.empty:
+            # Columns are lowercased by _get_columns helper, so `Rep ID` becomes `rep_id`
+            val = df.iloc[0].get("rep_id")
+            if val is not None:
+                return str(val).strip()
+        return None
+    except Exception as e:
+        logger.error(f"Error resolving rep id for email {email}: {e}")
+        return None
+
+
 # MAIN CONCURRENT DATA RETRIEVAL
 def get_rep_data(rep_id: str):
     """
