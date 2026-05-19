@@ -42,7 +42,7 @@ def _save_memory():
 # Initial load
 _load_memory()
 
-MAX_HISTORY_TURNS = 2   # keep last 2 user+assistant pairs = 4 entries
+MAX_HISTORY_TURNS = 2 
 
 
 def get_history(memory: dict) -> list[dict]:
@@ -68,7 +68,6 @@ def get_formatted_history(user_id: str) -> str:
         content = turn["content"]
         lines.append(f"{role}: {content}")
 
-        # Attach snapshot so LLM can resolve references like "these numbers"
         snapshot = turn.get("data_snapshot")
         if snapshot:
             snapshot_lines = [f"  [{k}: {v}]" for k, v in snapshot.items()]

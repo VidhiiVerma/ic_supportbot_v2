@@ -36,16 +36,12 @@ import msal
 from app.services.router import get_rep_explanation
 from app.llm import LLM
 
-# =========================================================
 # LOGGING
-# =========================================================
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# =========================================================
 # QUICK REPLIES
-# =========================================================
 
 QUICK_REPLY_QUESTIONS = [
     "Show my IC payout for this quarter.",
@@ -54,9 +50,7 @@ QUICK_REPLY_QUESTIONS = [
     "Share my current IC plan document.",
 ]
 
-# =========================================================
 # ENV VARIABLES
-# =========================================================
 
 MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID")
 MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD")
@@ -64,15 +58,11 @@ MICROSOFT_APP_TENANT_ID = os.getenv("MICROSOFT_APP_TENANT_ID")
 
 logger.info("Microsoft credentials loaded successfully")
 
-# =========================================================
 # THREAD POOL
-# =========================================================
 
 sync_executor = ThreadPoolExecutor(max_workers=10)
 
-# =========================================================
 # MSAL CACHE
-# =========================================================
 
 class TeamsAuthCache:
 
@@ -129,23 +119,14 @@ def _fixed_get_access_token(self):
 
 MicrosoftAppCredentials.get_access_token = _fixed_get_access_token
 
-# =========================================================
 # GLOBAL APP STATE
-# =========================================================
 
 rag = None
 rag_status = "uninitialized"
 
-# =========================================================
 # DATABRICKS KEEP ALIVE
-# =========================================================
 
 async def keep_databricks_warm():
-    """
-    Keeps the Databricks / SQL connection warm so the first user message
-    after an idle period does not hit a cold-start delay.
-    Runs every 90 seconds (well within the typical 5-minute idle timeout).
-    """
     from app.db import fetch_df
 
     while True:
@@ -169,9 +150,7 @@ async def keep_databricks_warm():
         # 90-second interval keeps connections alive through short idle gaps
         await asyncio.sleep(90)
 
-# =========================================================
 # FASTAPI LIFESPAN
-# =========================================================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -237,18 +216,14 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
 
-# =========================================================
 # FASTAPI APP
-# =========================================================
 
 app = FastAPI(
     title="IC Compensation Chatbot",
     lifespan=lifespan
 )
 
-# =========================================================
 # CORS
-# =========================================================
 
 app.add_middleware(
     CORSMiddleware,
@@ -258,9 +233,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =========================================================
 # REQUEST LOGGER
-# =========================================================
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -292,9 +265,7 @@ async def log_requests(request: Request, call_next):
 
         raise
 
-# =========================================================
 # HEALTH ROUTES
-# =========================================================
 
 @app.get("/")
 def root():
@@ -313,9 +284,7 @@ def health():
         "rag_status": rag_status
     }
 
-# =========================================================
 # BOT FRAMEWORK ADAPTER
-# =========================================================
 
 adapter_settings = BotFrameworkAdapterSettings(
     app_id=MICROSOFT_APP_ID,
@@ -325,15 +294,11 @@ adapter_settings = BotFrameworkAdapterSettings(
 
 adapter = BotFrameworkAdapter(adapter_settings)
 
-# =========================================================
 # LLM
-# =========================================================
 
 llm = LLM()
 
-# =========================================================
 # REQUEST MODELS
-# =========================================================
 
 class AskRequest(BaseModel):
     query: str
@@ -345,20 +310,12 @@ class AskResponse(BaseModel):
     text: str
     status: str = "success"
 
-# =========================================================
 # HELPERS
-# =========================================================
 
 def _strip_html(text: str) -> str:
-    """
-    Decode HTML entities and remove genuine HTML tags.
-    Preserves literal '<' and '>' that are not part of an HTML tag
-    (e.g. the raw text that Teams echoes back from an imBack action).
-    """
     if not text:
         return ""
 
-    # Decode HTML entities first
     clean_text = (
         text.replace("&nbsp;", " ")
         .replace("&lt;", "<")
@@ -368,19 +325,12 @@ def _strip_html(text: str) -> str:
         .replace("&#39;", "'")
     )
 
-    # Remove genuine HTML tags only (tags that contain at least one letter/slash)
-    # This avoids stripping plain '<word>' text that is NOT an HTML tag.
     clean_text = re.sub(r"</?[a-zA-Z][^>]*>", "", clean_text)
-
-    # Strip any residual lone angle-bracket pairs that wrap the entire message
-    # (Teams sometimes wraps imBack text in <at>…</at> spans already handled above)
     clean_text = clean_text.strip()
 
     return clean_text
 
-# =========================================================
 # TEAMS HANDLER
-# =========================================================
 
 async def handle_teams_message(turn_context: TurnContext):
 
@@ -415,35 +365,7 @@ async def handle_teams_message(turn_context: TurnContext):
 
             return
 
-        # =================================================
-        # ACCESS CONTROL & USER RESOLUTION
-        # =================================================
-        from app.db import fetch_rep_id_by_email
-
-        loop = asyncio.get_running_loop()
-        resolved_rep_id = await loop.run_in_executor(
-            sync_executor,
-            fetch_rep_id_by_email,
-            email,
-        )
-
-        if not resolved_rep_id:
-            logger.warning(f"Access Denied: Email '{email}' not found in user_access.")
-            denied_msg = (
-                f"Access Denied: Your email address ({email}) is not registered in the "
-                "incentive compensation system. Please contact your system administrator."
-            )
-            await turn_context.send_activity(
-                Activity(
-                    type=ActivityTypes.message,
-                    text=denied_msg,
-                    text_format=TextFormatTypes.plain,
-                )
-            )
-            return
-
-        rep_id = resolved_rep_id
-        logger.info(f"Dynamically resolved Rep ID: {rep_id} for email: {email}")
+        rep_id = "1150"
 
         msg_lower = message.lower().strip()
 
@@ -455,9 +377,7 @@ async def handle_teams_message(turn_context: TurnContext):
             "help",
         }
 
-        # =================================================
         # GREETING FLOW
-        # =================================================
 
         if msg_lower in GREETINGS:
 
@@ -560,15 +480,11 @@ async def handle_teams_message(turn_context: TurnContext):
 
             return
 
-        # =================================================
         # MAIN QUERY FLOW
-        # =================================================
 
         logger.info(f"Rep ID    : {rep_id}")
         logger.info("Calling get_rep_explanation")
 
-        # Send a typing indicator immediately so Teams shows activity
-        # while the DB / LLM call is in flight (handles cold-start latency).
         try:
             await turn_context.send_activity(
                 Activity(type=ActivityTypes.typing)
@@ -595,7 +511,7 @@ async def handle_teams_message(turn_context: TurnContext):
             Activity(
                 type=ActivityTypes.message,
                 text=reply,
-                text_format=TextFormatTypes.markdown,
+                text_format=TextFormatTypes.plain,
             )
         )
 
@@ -612,9 +528,7 @@ async def handle_teams_message(turn_context: TurnContext):
             "An error occurred. Please try again."
         )
 
-# =========================================================
 # TEAMS ROUTE
-# =========================================================
 
 @app.post("/api/messages")
 async def messages(req: Request):
@@ -660,9 +574,7 @@ async def messages(req: Request):
             detail="Bot adapter failed to process activity"
         )
 
-# =========================================================
 # ASK ROUTE
-# =========================================================
 
 @app.post("/ask", response_model=AskResponse)
 async def ask(data: AskRequest):

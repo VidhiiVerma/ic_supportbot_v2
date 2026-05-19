@@ -33,15 +33,6 @@ _FOLLOWUP_SIGNALS = {
 
 
 def _build_rag_query(question: str, user_id: str) -> str:
-    """
-    For follow-up questions, enrich the RAG query with the last assistant
-    response so vector retrieval finds the right policy section.
-
-    Example:
-        question     = "why commission rate is 10 only"
-        last_response = "Commission: 49 TRx x $10/TRx = $490"
-        rag_query    = "why commission rate is 10 only\nContext: Commission: ..."
-    """
     q_lower = question.lower()
     is_followup = any(signal in q_lower for signal in _FOLLOWUP_SIGNALS)
 

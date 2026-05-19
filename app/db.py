@@ -49,7 +49,7 @@ class DatabricksConnectionPool:
         # 1. Try to fetch an existing warm connection from the pool immediately
         try:
             conn = self._pool.get_nowait()
-            # Test connection validity with a simple lightweight ping/check
+            # Test connection validity with a simple lightweight check
             try:
                 with conn.cursor() as cursor:
                     pass
@@ -121,7 +121,7 @@ def fetch_df(query: str, params: tuple = ()) -> pd.DataFrame:
             db_pool.release_connection(conn)
 
 
-#  WAKE UP WAREHOUSE (Non-blocking)
+#  WAKE UP WAREHOUSE 
 def _wakeup():
     """Triggers warehouse start during server boot."""
     try:
