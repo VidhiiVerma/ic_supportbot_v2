@@ -36,12 +36,8 @@ import msal
 from app.services.router import get_rep_explanation
 from app.llm import LLM
 
-# LOGGING
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# QUICK REPLIES
 
 QUICK_REPLY_QUESTIONS = [
     "Show my IC payout for this quarter.",
@@ -50,19 +46,15 @@ QUICK_REPLY_QUESTIONS = [
     "Share my current IC plan document.",
 ]
 
-# ENV VARIABLES
-
-MICROSOFT_APP_ID = os.getenv("MICROSOFT_APP_ID")
+MICROSOFT_APP_ID       = os.getenv("MICROSOFT_APP_ID")
 MICROSOFT_APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD")
 MICROSOFT_APP_TENANT_ID = os.getenv("MICROSOFT_APP_TENANT_ID")
 
 logger.info("Microsoft credentials loaded successfully")
 
-# THREAD POOL
-
 sync_executor = ThreadPoolExecutor(max_workers=10)
 
-# MSAL CACHE
+_email_cache: dict = {}
 
 class TeamsAuthCache:
 
@@ -71,17 +63,13 @@ class TeamsAuthCache:
 
     @property
     def app(self):
-
         if self._app is None:
-
             if (
                 not MICROSOFT_APP_ID
                 or not MICROSOFT_APP_PASSWORD
                 or not MICROSOFT_APP_TENANT_ID
             ):
-                logger.warning(
-                    "Microsoft credentials missing. Running in mock mode."
-                )
+                logger.warning("Microsoft credentials missing. Running in mock mode.")
                 return None
 
             self._app = msal.ConfidentialClientApplication(
@@ -93,7 +81,6 @@ class TeamsAuthCache:
         return self._app
 
     def get_access_token(self):
-
         app = self.app
 
         if app is None:
@@ -109,48 +96,35 @@ class TeamsAuthCache:
 
         return result["access_token"]
 
-
 auth_cache = TeamsAuthCache()
-
 
 def _fixed_get_access_token(self):
     return auth_cache.get_access_token()
 
-
 MicrosoftAppCredentials.get_access_token = _fixed_get_access_token
 
-# GLOBAL APP STATE
-
-rag = None
+rag        = None
 rag_status = "uninitialized"
-
-# DATABRICKS KEEP ALIVE
 
 async def keep_databricks_warm():
     from app.db import fetch_df
 
     while True:
-
         try:
             logger.info("Sending keep-alive ping to Databricks...")
 
             loop = asyncio.get_running_loop()
-
-            await loop.run_in_executor(
-                sync_executor,
-                fetch_df,
-                "SELECT 1"
-            )
+            await loop.run_in_executor(sync_executor, fetch_df, "SELECT 1")
 
             logger.info("Databricks keep-alive successful.")
 
         except Exception as e:
             logger.warning(f"Databricks keep-alive failed: {e}")
 
-        # 90-second interval keeps connections alive through short idle gaps
-        await asyncio.sleep(90)
+        # FIX 4: 8 minutes instead of 90 seconds
+        # Set your Databricks warehouse Auto Stop to 10+ minutes
+        await asyncio.sleep(8 * 60)
 
-# FASTAPI LIFESPAN
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -163,7 +137,6 @@ async def lifespan(app: FastAPI):
     logger.info("Starting background RAG initialization...")
 
     def init_rag():
-
         try:
             from rag.pipeline import RAGSystem
 
@@ -176,35 +149,23 @@ async def lifespan(app: FastAPI):
             logger.warning(f"RAG disabled: {str(e)}")
             return None, f"error: {str(e)}"
 
-    task = asyncio.create_task(
-        asyncio.to_thread(init_rag)
-    )
+    task = asyncio.create_task(asyncio.to_thread(init_rag))
 
     def on_rag_done(t):
-
         global rag
         global rag_status
 
         try:
             rag, rag_status = t.result()
-
-            logger.info(
-                f"RAG background task completed. Status: {rag_status}"
-            )
+            logger.info(f"RAG background task completed. Status: {rag_status}")
 
         except Exception as e:
-
             rag_status = f"error: {str(e)}"
-
-            logger.error(
-                f"RAG background task failed: {e}"
-            )
+            logger.error(f"RAG background task failed: {e}")
 
     task.add_done_callback(on_rag_done)
 
-    keepalive_task = asyncio.create_task(
-        keep_databricks_warm()
-    )
+    keepalive_task = asyncio.create_task(keep_databricks_warm())
 
     yield
 
@@ -212,18 +173,13 @@ async def lifespan(app: FastAPI):
 
     try:
         await keepalive_task
-
     except asyncio.CancelledError:
         pass
 
-# FASTAPI APP
-
 app = FastAPI(
     title="IC Compensation Chatbot",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
-
-# CORS
 
 app.add_middleware(
     CORSMiddleware,
@@ -233,39 +189,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# REQUEST LOGGER
-
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-
     start_time = time.time()
 
-    logger.info(
-        f"Incoming Request: {request.method} {request.url.path}"
-    )
+    logger.info(f"Incoming Request: {request.method} {request.url.path}")
 
     try:
-
-        response = await call_next(request)
-
+        response     = await call_next(request)
         process_time = time.time() - start_time
 
-        logger.info(
-            f"Response: {response.status_code} | Time: {process_time:.4f}s"
-        )
+        logger.info(f"Response: {response.status_code} | Time: {process_time:.4f}s")
 
         return response
 
     except Exception as e:
-
-        logger.error(
-            f"Unhandled Exception in Request: {e}",
-            exc_info=True
-        )
-
+        logger.error(f"Unhandled Exception in Request: {e}", exc_info=True)
         raise
-
-# HEALTH ROUTES
 
 @app.get("/")
 def root():
@@ -279,12 +219,7 @@ async def ping():
 
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "rag_status": rag_status
-    }
-
-# BOT FRAMEWORK ADAPTER
+    return {"status": "ok", "rag_status": rag_status}
 
 adapter_settings = BotFrameworkAdapterSettings(
     app_id=MICROSOFT_APP_ID,
@@ -294,23 +229,16 @@ adapter_settings = BotFrameworkAdapterSettings(
 
 adapter = BotFrameworkAdapter(adapter_settings)
 
-# LLM
-
 llm = LLM()
 
-# REQUEST MODELS
-
 class AskRequest(BaseModel):
-    query: str
-    rep_id: str
+    query:   str
+    rep_id:  str
     user_id: str = "api-user"
 
-
 class AskResponse(BaseModel):
-    text: str
+    text:   str
     status: str = "success"
-
-# HELPERS
 
 def _strip_html(text: str) -> str:
     if not text:
@@ -318,11 +246,11 @@ def _strip_html(text: str) -> str:
 
     clean_text = (
         text.replace("&nbsp;", " ")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&amp;", "&")
-        .replace("&quot;", '"')
-        .replace("&#39;", "'")
+            .replace("&lt;",   "<")
+            .replace("&gt;",   ">")
+            .replace("&amp;",  "&")
+            .replace("&quot;", '"')
+            .replace("&#39;",  "'")
     )
 
     clean_text = re.sub(r"</?[a-zA-Z][^>]*>", "", clean_text)
@@ -330,27 +258,24 @@ def _strip_html(text: str) -> str:
 
     return clean_text
 
-# TEAMS HANDLER
-
 async def handle_teams_message(turn_context: TurnContext):
 
     try:
-
         logger.info("NEW TEAMS MESSAGE")
 
         user_name = turn_context.activity.from_property.name
-        user_id = turn_context.activity.from_property.id
+        user_id   = turn_context.activity.from_property.id
 
-        member = await TeamsInfo.get_member(
-            turn_context,
-            user_id
-        )
+        if user_id not in _email_cache:
+            member = await TeamsInfo.get_member(turn_context, user_id)
+            _email_cache[user_id] = member.email
+            logger.info(f"Email fetched and cached for user {user_id}: {member.email}")
+        else:
+            logger.info(f"Email cache HIT for user {user_id}")
 
-        email = member.email
-
-        message = _strip_html(
-            turn_context.activity.text or ""
-        )
+        email = _email_cache[user_id]
+       
+        message = _strip_html(turn_context.activity.text or "")
 
         logger.info(f"User Name : {user_name}")
         logger.info(f"User ID   : {user_id}")
@@ -358,48 +283,42 @@ async def handle_teams_message(turn_context: TurnContext):
         logger.info(f"Message   : {message}")
 
         if not message:
-
-            await turn_context.send_activity(
-                "Send a message."
-            )
-
+            await turn_context.send_activity("Send a message.")
             return
 
-        rep_id = "1150"
+        from app.db import fetch_rep_id_by_email
 
+        loop   = asyncio.get_running_loop()
+        rep_id = await loop.run_in_executor(
+            sync_executor,
+            fetch_rep_id_by_email,
+            email,
+        )
+
+        if not rep_id:
+            logger.warning(f"No rep_id found for email: {email}")
+            await turn_context.send_activity(
+                f"Sorry {user_name}, your account isn't set up in the IC system yet. "
+                "Please contact your IC administrator."
+            )
+            return
+
+        logger.info(f"Resolved rep_id: {rep_id} for email: {email}")
+     
         msg_lower = message.lower().strip()
 
-        GREETINGS = {
-            "hi",
-            "hello",
-            "hey",
-            "start",
-            "help",
-        }
-
-        # GREETING FLOW
+        GREETINGS = {"hi", "hello", "hey", "start", "help"}
 
         if msg_lower in GREETINGS:
 
-            from app.db import get_rep_data
+            from app.db import fetch_payout_data
 
-            loop = asyncio.get_running_loop()
-
-            rep_data = await loop.run_in_executor(
+            payout   = await loop.run_in_executor(
                 sync_executor,
-                get_rep_data,
-                rep_id,
+                fetch_payout_data,
+                int(rep_id),
             )
-
-            if rep_data and rep_data.get("payout"):
-
-                rep_name = rep_data["payout"].get(
-                    "rep_name",
-                    user_name
-                )
-
-            else:
-                rep_name = user_name
+            rep_name = (payout or {}).get("rep_name") or user_name
 
             welcome_msg = (
                 f"Hello {rep_name}! "
@@ -407,92 +326,84 @@ async def handle_teams_message(turn_context: TurnContext):
             )
 
             adaptive_card_content = {
-                "type": "AdaptiveCard",
+                "type":    "AdaptiveCard",
                 "version": "1.4",
 
                 "body": [
                     {
-                        "type": "TextBlock",
-                        "text": welcome_msg,
-                        "wrap": True,
-                        "size": "Medium"
+                        "type":  "TextBlock",
+                        "text":  welcome_msg,
+                        "wrap":  True,
+                        "size":  "Medium",
                     }
                 ],
 
                 "actions": [
                     {
-                        "type": "Action.Submit",
+                        "type":  "Action.Submit",
                         "title": "Show my IC payout for this quarter.",
-                        "data": {
+                        "data":  {
                             "msteams": {
-                                "type": "imBack",
-                                "value": "Show my IC payout for this quarter."
+                                "type":  "imBack",
+                                "value": "Show my IC payout for this quarter.",
                             }
-                        }
+                        },
                     },
-
                     {
-                        "type": "Action.Submit",
+                        "type":  "Action.Submit",
                         "title": "Explain my eligibility for the current period.",
-                        "data": {
+                        "data":  {
                             "msteams": {
-                                "type": "imBack",
-                                "value": "Explain my eligibility for the current period."
+                                "type":  "imBack",
+                                "value": "Explain my eligibility for the current period.",
                             }
-                        }
+                        },
                     },
-
                     {
-                        "type": "Action.Submit",
+                        "type":  "Action.Submit",
                         "title": "Show my credits by product.",
-                        "data": {
+                        "data":  {
                             "msteams": {
-                                "type": "imBack",
-                                "value": "Show my credits by product."
+                                "type":  "imBack",
+                                "value": "Show my credits by product.",
                             }
-                        }
+                        },
                     },
-
                     {
-                        "type": "Action.Submit",
+                        "type":  "Action.Submit",
                         "title": "Share my current IC plan document.",
-                        "data": {
+                        "data":  {
                             "msteams": {
-                                "type": "imBack",
-                                "value": "Share my current IC plan document."
+                                "type":  "imBack",
+                                "value": "Share my current IC plan document.",
                             }
-                        }
-                    }
-                ]
+                        },
+                    },
+                ],
             }
 
             attachment = Attachment(
                 content_type="application/vnd.microsoft.card.adaptive",
-                content=adaptive_card_content
+                content=adaptive_card_content,
             )
 
             await turn_context.send_activity(
                 Activity(
                     type=ActivityTypes.message,
-                    attachments=[attachment]
+                    attachments=[attachment],
                 )
             )
 
             return
 
-        # MAIN QUERY FLOW
-
         logger.info(f"Rep ID    : {rep_id}")
         logger.info("Calling get_rep_explanation")
 
+        # Send typing indicator immediately so user knows bot is working
         try:
-            await turn_context.send_activity(
-                Activity(type=ActivityTypes.typing)
-            )
+            await turn_context.send_activity(Activity(type=ActivityTypes.typing))
         except Exception:
             pass  # typing indicator is best-effort
-
-        loop = asyncio.get_running_loop()
 
         try:
             reply = await asyncio.wait_for(
@@ -506,7 +417,7 @@ async def handle_teams_message(turn_context: TurnContext):
                     user_id,
                     user_name,
                 ),
-                timeout=150  # Fail gracefully before gunicorn's 180s kill
+                timeout=150,  # Fail gracefully before gunicorn's 180s kill
             )
         except asyncio.TimeoutError:
             logger.error("get_rep_explanation timed out after 150s")
@@ -525,39 +436,21 @@ async def handle_teams_message(turn_context: TurnContext):
         logger.info("Response sent successfully")
 
     except Exception as e:
-
-        logger.error(
-            "Teams error",
-            exc_info=True
-        )
-
-        await turn_context.send_activity(
-            "An error occurred. Please try again."
-        )
-
-# TEAMS ROUTE
+        logger.error("Teams error", exc_info=True)
+        await turn_context.send_activity("An error occurred. Please try again.")
 
 @app.post("/api/messages")
 async def messages(req: Request):
 
     try:
-
         body_bytes = await req.body()
 
-        logger.info(
-            f"Raw Teams Payload: {body_bytes.decode('utf-8')}"
-        )
+        logger.info(f"Raw Teams Payload: {body_bytes.decode('utf-8')}")
 
-        body = await req.json()
+        body        = await req.json()
+        auth_header = req.headers.get("Authorization", "")
 
-        auth_header = req.headers.get(
-            "Authorization",
-            ""
-        )
-
-        logger.info(
-            f"Auth Header Present: {bool(auth_header)}"
-        )
+        logger.info(f"Auth Header Present: {bool(auth_header)}")
 
         activity = Activity().deserialize(body)
 
@@ -570,24 +463,16 @@ async def messages(req: Request):
         return response or Response(status_code=201)
 
     except Exception as e:
-
-        logger.error(
-            f"Bot Framework Adapter Error: {e}",
-            exc_info=True
-        )
-
+        logger.error(f"Bot Framework Adapter Error: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail="Bot adapter failed to process activity"
+            detail="Bot adapter failed to process activity",
         )
-
-# ASK ROUTE
 
 @app.post("/ask", response_model=AskResponse)
 async def ask(data: AskRequest):
 
     try:
-
         loop = asyncio.get_running_loop()
 
         result = await loop.run_in_executor(
@@ -601,18 +486,8 @@ async def ask(data: AskRequest):
             data.user_id,
         )
 
-        return AskResponse(
-            text=result.strip()
-        )
+        return AskResponse(text=result.strip())
 
     except Exception as e:
-
-        logger.error(
-            "Ask error",
-            exc_info=True
-        )
-
-        raise HTTPException(
-            status_code=500,
-            detail="Internal error"
-        )
+        logger.error("Ask error", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal error")
