@@ -6,7 +6,7 @@ workers = 1
 worker_class = "uvicorn.workers.UvicornWorker"
 
 # Prevent Gunicorn from killing workers waiting on long LLM responses
-timeout = 120 
+timeout = 180 
 
 # TCP keepalive for load balancers
 keepalive = 5 

@@ -494,16 +494,23 @@ async def handle_teams_message(turn_context: TurnContext):
 
         loop = asyncio.get_running_loop()
 
-        reply = await loop.run_in_executor(
-            sync_executor,
-            get_rep_explanation,
-            rep_id,
-            message,
-            rag,
-            llm,
-            user_id,
-            user_name,
-        )
+        try:
+            reply = await asyncio.wait_for(
+                loop.run_in_executor(
+                    sync_executor,
+                    get_rep_explanation,
+                    rep_id,
+                    message,
+                    rag,
+                    llm,
+                    user_id,
+                    user_name,
+                ),
+                timeout=150  # Fail gracefully before gunicorn's 180s kill
+            )
+        except asyncio.TimeoutError:
+            logger.error("get_rep_explanation timed out after 150s")
+            reply = "Your request took too long to process. Please try again."
 
         logger.info(f"Bot Reply : {reply}")
 

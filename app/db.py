@@ -49,10 +49,11 @@ class DatabricksConnectionPool:
         # 1. Try to fetch an existing warm connection from the pool immediately
         try:
             conn = self._pool.get_nowait()
-            # Test connection validity with a simple lightweight check
+            # Test connection validity with an actual lightweight query
             try:
                 with conn.cursor() as cursor:
-                    pass
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
                 return conn
             except Exception as e:
                 logger.warning(f"Stale connection detected in pool. Reconnecting... Error: {e}")
@@ -60,6 +61,9 @@ class DatabricksConnectionPool:
                     conn.close()
                 except Exception:
                     pass
+                with self._lock:
+                    if self._created > 0:
+                        self._created -= 1
                 return self._create_connection()
         except queue.Empty:
             # 2. Pool is empty. Create a new connection if we haven't reached the limit
@@ -70,14 +74,14 @@ class DatabricksConnectionPool:
             
             # 3. If pool is full and completely busy, block and wait for a connection to be released
             logger.info("Databricks connection pool limit reached. Waiting for connection release...")
-            return self._pool.get(block=True)
+            return self._pool.get(block=True, timeout=30)
 
     def release_connection(self, conn):
         if conn is not None:
             self._pool.put(conn)
 
-# Instantiate global connection pool
-db_pool = DatabricksConnectionPool(size=10)
+# Instantiate global connection pool (small size — only 1 gunicorn worker)
+db_pool = DatabricksConnectionPool(size=3)
 
 
 # Backward compatible helper
@@ -90,6 +94,7 @@ def fetch_df(query: str, params: tuple = ()) -> pd.DataFrame:
     max_retries = 3
     for attempt in range(max_retries):
         conn = db_pool.get_connection()
+        should_release = True  # Track whether conn should go back to pool
         try:
             with conn.cursor() as cursor:
                 cursor.execute(query, params)
@@ -98,7 +103,8 @@ def fetch_df(query: str, params: tuple = ()) -> pd.DataFrame:
                 df = pd.DataFrame(rows, columns=columns)
                 return df
         except Exception as e:
-            # Discard dead/broken connections on exception
+            # Connection is broken — close it and do NOT return it to pool
+            should_release = False
             try:
                 conn.close()
             except Exception:
@@ -117,8 +123,9 @@ def fetch_df(query: str, params: tuple = ()) -> pd.DataFrame:
                 logger.error("Query failed permanently after retries.", exc_info=True)
                 raise
         finally:
-            # Release connection back to pool if not broken
-            db_pool.release_connection(conn)
+            # Only release healthy connections back to pool
+            if should_release:
+                db_pool.release_connection(conn)
 
 
 #  WAKE UP WAREHOUSE 
