@@ -24,7 +24,6 @@ from app.conversation_memory import (
 
 logger = logging.getLogger(__name__)
 
-# Follow-up signals that indicate the user is asking about a previous response
 _FOLLOWUP_SIGNALS = {
     "why", "how", "explain", "what is this", "what are these",
     "tell me more", "what does this mean", "reason", "because",
