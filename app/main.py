@@ -511,7 +511,7 @@ async def handle_teams_message(turn_context: TurnContext):
             Activity(
                 type=ActivityTypes.message,
                 text=reply,
-                text_format=TextFormatTypes.plain,
+                text_format=TextFormatTypes.markdown,
             )
         )
 
