@@ -1,8 +1,4 @@
 def calculate_ic(rep_data):
-    """
-    Extracts pre-calculated values directly from the database record (Excel data).
-    No Python math — all values come straight from your uploaded Excel sheet.
-    """
     payout = rep_data.get("payout", {})
     if not payout:
         return None

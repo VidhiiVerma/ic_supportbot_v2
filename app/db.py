@@ -199,11 +199,32 @@ def fetch_rep_id_by_email(email: str):
         return None
 
 
+#  IN-MEMORY TTL CACHE FOR DATABASE QUERIES
+_rep_data_cache = {}
+_cache_lock = threading.Lock()
+CACHE_TTL_SECONDS = 600  # 10 minutes
+
 # MAIN CONCURRENT DATA RETRIEVAL
 def get_rep_data(rep_id: str):
     """
     Fetches payout and sales concurrently, followed by eligibility to minimize latency.
+    Utilizes an in-memory TTL cache to eliminate redundant Databricks queries on successive turns.
     """
+    import time
+    
+    now = time.time()
+    rep_str = str(rep_id).strip()
+    
+    # Check cache first
+    with _cache_lock:
+        if rep_str in _rep_data_cache:
+            entry = _rep_data_cache[rep_str]
+            if now - entry["timestamp"] < CACHE_TTL_SECONDS:
+                logger.info(f"Cache HIT for rep {rep_str} (data was retrieved {now - entry['timestamp']:.1f}s ago)")
+                return entry["data"]
+            else:
+                logger.info(f"Cache expired for rep {rep_str}. Refetching from Databricks...")
+                
     try:
         rep_id_int = int(rep_id)
 
@@ -222,11 +243,21 @@ def get_rep_data(rep_id: str):
         rep_name = payout.get("rep_name", "")
         eligibility = fetch_eligibility_data(rep_name)
 
-        return {
+        data = {
             "payout": payout,
             "eligibility": eligibility,
             "sales": sales
         }
+        
+        # Save to cache
+        with _cache_lock:
+            _rep_data_cache[rep_str] = {
+                "timestamp": now,
+                "data": data
+            }
+            logger.info(f"Successfully cached rep data for {rep_str}")
+
+        return data
 
     except Exception:
         logger.error("Error fetching rep data", exc_info=True)
